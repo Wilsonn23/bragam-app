@@ -1,100 +1,57 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
-import * as Location from 'expo-location';
+import React, { useState } from 'react';
+import { StyleSheet, Text, View, ActivityIndicator, ScrollView } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { useAppActive, useForegroundLocation } from './src/hooks/useForegroundLocation';
+import { usePoiTriggers } from './src/hooks/usePoiTriggers';
+import { pois } from './src/poi/adapter';
+import { PoiTriggerModal } from './src/components/PoiTriggerModal';
+import { ActionButton } from './src/components/ActionButton';
+import { theme } from './src/components/theme';
+
+const devFixtures = __DEV__ ? require('./src/dev/fixtures') : null;
+const SimulationPanel = __DEV__ ? require('./src/dev/SimulationPanel').SimulationPanel : null;
 
 export default function App() {
-  const [location, setLocation] = useState(null);
-  const [errorMsg, setErrorMsg] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let subscription;
-
-    const startLocationTracking = async () => {
-      try {
-        // 1. Minta Izin Akses Lokasi
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          setErrorMsg('Izin akses lokasi ditolak. Aktifkan izin lokasi untuk menggunakan BRAGAm.');
-          setLoading(false);
-          return;
-        }
-
-        // 2. Baca Posisi Awal
-        let initialLocation = await Location.getCurrentPositionAsync({});
-        setLocation(initialLocation.coords);
-        setLoading(false);
-
-        // 3. Pantau Perubahan Lokasi secara Real-time (GPS Live Tracking)
-        subscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 2000, // Update setiap 2 detik
-            distanceInterval: 1, // Update setiap berpindah 1 meter
-          },
-          (newLocation) => {
-            setLocation(newLocation.coords);
-          }
-        );
-      } catch (error) {
-        setErrorMsg('Gagal membaca sinyal GPS.');
-        setLoading(false);
-      }
-    };
-
-    startLocationTracking();
-
-    // Cleanup listener saat komponen di-unmount
-    return () => {
-      if (subscription) {
-        subscription.remove();
-      }
-    };
-  }, []);
-
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>BRAGAm - GPS Tracker</Text>
-
-      {loading ? (
-        <ActivityIndicator size="large" color="#0000ff" />
-      ) : errorMsg ? (
-        <Text style={styles.errorText}>{errorMsg}</Text>
-      ) : location ? (
-        <View style={styles.locationBox}>
-          <Text style={styles.label}>Latitude: {location.latitude}</Text>
-          <Text style={styles.label}>Longitude: {location.longitude}</Text>
-          <Text style={styles.label}>Akurasi: ±{location.accuracy?.toFixed(1)} meter</Text>
-        </View>
-      ) : null}
-    </View>
-  );
+  const active = useAppActive();
+  const [simulation, setSimulation] = useState(false);
+  const [simSample, setSimSample] = useState(null);
+  const [detailId, setDetailId] = useState(null);
+  const isSimulating = __DEV__ && simulation;
+  const gps = useForegroundLocation(active && !isSimulating);
+  const sample = isSimulating ? simSample : gps.sample;
+  const { event, dismiss } = usePoiTriggers(isSimulating ? devFixtures.testPois : pois, sample, active);
+  function onOpenPoiDetail(poiId) {
+    setDetailId(poiId); // Integration seam: replace with Expo Router navigation when UI05 exists.
+    dismiss();
+  }
+  return <SafeAreaProvider><SafeAreaView style={styles.container}>
+    <ScrollView contentContainerStyle={styles.content}>
+      <Text accessibilityRole="header" style={styles.title}>BRAGAm - GPS Tracker</Text>
+      <Text style={styles.body}>{isSimulating ? 'Sumber lokasi: SIMULASI' : 'Sumber lokasi: GPS perangkat'}</Text>
+      {!active && <Text style={styles.body}>Deteksi dijeda saat aplikasi tidak aktif.</Text>}
+      {!isSimulating && gps.loading && <ActivityIndicator size="large" color={theme.primary} accessibilityLabel="Membaca lokasi" />}
+      {!isSimulating && gps.error && <View><Text style={styles.error}>{gps.error}</Text><ActionButton label="Coba baca GPS lagi" onPress={gps.retry} /></View>}
+      {sample && <View style={styles.locationBox}>
+        <Text style={styles.body}>Latitude: {sample.latitude}</Text>
+        <Text style={styles.body}>Longitude: {sample.longitude}</Text>
+        <Text style={styles.body}>Akurasi: {Number.isFinite(sample.accuracy) ? `±${sample.accuracy.toFixed(1)} meter` : 'Belum tersedia'}</Text>
+        <Text style={styles.body}>Notifikasi membutuhkan sampel maksimal 15 detik dan akurasi ≤25 meter.</Text>
+      </View>}
+      {!isSimulating && <Text style={styles.body}>Dataset PB03 belum tersedia. Notifikasi GPS akan aktif setelah data POI terintegrasi.</Text>}
+      {__DEV__ && <ActionButton secondary label={isSimulating ? 'Gunakan GPS asli' : 'Aktifkan simulasi development'} onPress={() => {
+        setSimSample(null); setDetailId(null); setSimulation(value => !value);
+      }} />}
+      {isSimulating && SimulationPanel && <SimulationPanel onSample={setSimSample} />}
+      {__DEV__ && detailId && <Text accessibilityLiveRegion="polite" style={styles.locationBox}>Integrasi Lihat Detail menerima ID POI: {detailId}. UI05 belum tersedia.</Text>}
+    </ScrollView>
+    <PoiTriggerModal poi={event?.poi} onClose={dismiss} onOpenPoiDetail={onOpenPoiDetail} />
+  </SafeAreaView></SafeAreaProvider>;
 }
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  locationBox: {
-    padding: 15,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-  },
-  label: {
-    fontSize: 16,
-    marginBottom: 5,
-  },
-  errorText: {
-    color: 'red',
-    textAlign: 'center',
-  },
+  container: { flex: 1, backgroundColor: theme.background },
+  content: { padding: 20, gap: 16 },
+  title: { fontSize: 22, fontWeight: 'bold', color: theme.ink },
+  body: { fontSize: 16, lineHeight: 24, color: theme.ink },
+  locationBox: { padding: 15, backgroundColor: theme.surface, borderRadius: 8 },
+  error: { fontSize: 16, color: theme.error },
 });
