@@ -23,7 +23,8 @@
     },
     "plugins": [
       ["expo-audio", { "enableBackgroundPlayback": true, "recordAudioAndroid": false, "microphonePermission": false }],
-      "expo-router"
+      "expo-router",
+      "expo-font"
     ]
   }
 }
