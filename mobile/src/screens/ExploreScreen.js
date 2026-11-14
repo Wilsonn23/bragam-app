@@ -51,6 +51,7 @@ const RATING_OPTIONS = [
 ];
 
 export default function ExploreScreen({
+  windowShrink = 0,
   onOpenDetail,
   onOpenDirections,
   onSimulateGeofence,
@@ -283,7 +284,12 @@ export default function ExploreScreen({
       </View>
 
       {/* Draggable Bottom Sheet (Nearby You & Contextual Recommendation) */}
-      <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
+      <Animated.View
+        style={[
+          styles.bottomSheet,
+          { height: sheetHeight, bottom: -windowShrink },
+        ]}
+      >
         {/* Floating Recenter Button above sheet */}
         <TouchableOpacity activeOpacity={0.85} style={styles.recenterBtn}>
           <MaterialIcons name="my-location" size={24} color={COLORS.darkPurple} />
@@ -474,6 +480,7 @@ export default function ExploreScreen({
       {/* Search POI Slider */}
       <SearchPoiOverlay
         visible={isSearchOpen}
+        windowShrink={windowShrink}
         onClose={() => setIsSearchOpen(false)}
         onSelectPoi={(poi) => onOpenDetail?.(poi)}
       />

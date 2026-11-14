@@ -13,6 +13,7 @@ import {
   PanResponder,
   Dimensions,
   Keyboard,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from './theme';
@@ -47,7 +48,12 @@ const RATING_OPTIONS = [
   { label: '4+ ★', value: '4' },
 ];
 
-export default function SearchPoiOverlay({ visible, onClose, onSelectPoi }) {
+export default function SearchPoiOverlay({
+  visible,
+  windowShrink = 0,
+  onClose,
+  onSelectPoi,
+}) {
   const [categoryOptions, setCategoryOptions] = useState([
     { label: 'Category', value: 'Semua' },
   ]);
@@ -62,6 +68,7 @@ export default function SearchPoiOverlay({ visible, onClose, onSelectPoi }) {
 
   const [pois, setPois] = useState([]);
   const [loadingPois, setLoadingPois] = useState(true);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   // Ref untuk memfokuskan TextInput & membuka keyboard otomatis
   const searchInputRef = useRef(null);
@@ -71,6 +78,24 @@ export default function SearchPoiOverlay({ visible, onClose, onSelectPoi }) {
   const isExpandedRef = useRef(true);
   const sheetHeight = useRef(new Animated.Value(0)).current;
   const currentHeightRef = useRef(EXPANDED_HEIGHT);
+
+  // Pantau tinggi keyboard hanya untuk padding bawah FlatList (posisi overlay tetap terkunci)
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates?.height || 0);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const animateSheet = (toExpanded) => {
     const target = toExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
@@ -346,7 +371,12 @@ export default function SearchPoiOverlay({ visible, onClose, onSelectPoi }) {
   const activeDropdown = getDropdownConfig();
 
   return (
-    <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
+    <Animated.View
+      style={[
+        styles.bottomSheet,
+        { height: sheetHeight, bottom: -windowShrink },
+      ]}
+    >
       {/* Area Drag Handle & Header Slider */}
       <View {...panResponder.panHandlers} style={styles.dragHeaderArea}>
         <TouchableOpacity
@@ -450,7 +480,10 @@ export default function SearchPoiOverlay({ visible, onClose, onSelectPoi }) {
           data={pois}
           keyExtractor={(item) => item.id}
           renderItem={renderPoiItem}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            keyboardHeight > 0 ? { paddingBottom: keyboardHeight + 24 } : null,
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
