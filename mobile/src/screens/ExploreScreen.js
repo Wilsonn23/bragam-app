@@ -9,6 +9,7 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  Platform,
 } from 'react-native';
 import MapView, {
   Marker,
@@ -88,10 +89,11 @@ export default function ExploreScreen({
       <View style={styles.mapCanvas}>
         <MapView
           ref={mapRef}
-          provider={PROVIDER_GOOGLE}
+          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           style={StyleSheet.absoluteFill}
           initialRegion={BRAGA_REGION}
-          customMapStyle={BRAGA_GRAY_MAP_STYLE}
+          customMapStyle={Platform.OS === 'android' ? BRAGA_GRAY_MAP_STYLE : undefined}
+          userInterfaceStyle="light"
           showsUserLocation={true}
           showsMyLocationButton={false}
           showsCompass={false}
