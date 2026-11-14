@@ -91,6 +91,26 @@ UPDATE pois
 SET location = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326);
 ```
 
+Untuk repository ini, Supabase dapat digunakan sebagai PostgreSQL hosted. Di Supabase, buka **SQL Editor** dan jalankan `CREATE EXTENSION IF NOT EXISTS postgis;`, lalu gunakan connection string dari menu **Connect** (gunakan Session pooler untuk backend yang berjalan terus-menerus). Jalankan dari Git Bash:
+```powershell
+cd backend
+cp .env.example .env
+# Isi DATABASE_URL di backend/.env dengan connection string Supabase.
+source .env
+psql "$DATABASE_URL" -f schema.sql
+psql "$DATABASE_URL" -c "\copy pois(id, name, category, latitude, longitude, radius_meters, cooldown_seconds, description, history, opening_hours, time_category, environment, avg_duration_minutes, price_min, price_max, menu_highlights, rating, reviews_count, notification_title) FROM '../data/dataset_poi_braga_pb03.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',')"
+npm install
+npm start
+```
+
+Jika tabel sudah pernah dibuat sebelum schema terbaru, jalankan `psql "$DATABASE_URL" -f schema.sql` lagi sebelum import CSV. Trigger akan mengisi `location` dari `latitude` dan `longitude`.
+
+Endpoint mobile yang tersedia:
+* `GET /api/pois` mengambil seluruh POI.
+* `GET /api/pois/nearby?latitude=-6.91775&longitude=107.60912` mengambil POI terdekat dalam radius geofence.
+
+Saat menjalankan Expo di perangkat fisik, set `EXPO_PUBLIC_API_URL` ke alamat IP LAN komputer yang menjalankan backend, bukan `localhost`.
+
 ---
 
 ## 4. Contoh Kueri Pemicu Geofence (Location-Trigger Query)
