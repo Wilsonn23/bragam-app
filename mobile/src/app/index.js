@@ -5,9 +5,9 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useAppActive, useForegroundLocation } from '../hooks/useForegroundLocation';
 import { usePoiTriggers } from '../hooks/usePoiTriggers';
 import { pois } from '../poi/adapter';
-import { PoiTriggerModal } from '../components/PoiTriggerModal';
+import PoiTriggerModal from '../components/PoiTriggerModal';
 import { ActionButton } from '../components/ActionButton';
-import { theme } from '../components/theme';
+import { COLORS } from '../components/theme';
 
 const devFixtures = __DEV__ ? require('../dev/fixtures') : null;
 const SimulationPanel = __DEV__ ? require('../dev/SimulationPanel').SimulationPanel : null;
@@ -29,7 +29,7 @@ export default function App() {
       <Text accessibilityRole="header" style={styles.title}>BRAGAm - GPS Tracker</Text>
       <Text style={styles.body}>{isSimulating ? 'Sumber lokasi: SIMULASI' : 'Sumber lokasi: GPS perangkat'}</Text>
       {!active && <Text style={styles.body}>Deteksi dijeda saat aplikasi tidak aktif.</Text>}
-      {!isSimulating && gps.loading && <ActivityIndicator size="large" color={theme.primary} accessibilityLabel="Membaca lokasi" />}
+      {!isSimulating && gps.loading && <ActivityIndicator size="large" color={COLORS.darkPurple} accessibilityLabel="Membaca lokasi" />}
       {!isSimulating && gps.error && <View><Text style={styles.error}>{gps.error}</Text><ActionButton label="Coba baca GPS lagi" onPress={gps.retry} /></View>}
       {sample && <View style={styles.locationBox}>
         <Text style={styles.body}>Latitude: {sample.latitude}</Text>
@@ -43,14 +43,19 @@ export default function App() {
       }} />}
       {isSimulating && SimulationPanel && <SimulationPanel onSample={setSimSample} />}
     </ScrollView>
-    <PoiTriggerModal poi={event?.poi} onClose={dismiss} onOpenPoiDetail={onOpenPoiDetail} />
+    <PoiTriggerModal
+      visible={Boolean(event?.poi)}
+      poi={event?.poi}
+      onClose={dismiss}
+      onCheckNow={poi => onOpenPoiDetail(poi.id)}
+    />
   </SafeAreaView></SafeAreaProvider>;
 }
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.background },
+  container: { flex: 1, backgroundColor: COLORS.softLilacBg },
   content: { padding: 20, gap: 16 },
-  title: { fontSize: 22, fontWeight: 'bold', color: theme.ink },
-  body: { fontSize: 16, lineHeight: 24, color: theme.ink },
-  locationBox: { padding: 15, backgroundColor: theme.surface, borderRadius: 8 },
-  error: { fontSize: 16, color: theme.error },
+  title: { fontSize: 22, fontWeight: 'bold', color: COLORS.textPrimary },
+  body: { fontSize: 16, lineHeight: 24, color: COLORS.textPrimary },
+  locationBox: { padding: 15, backgroundColor: COLORS.white, borderRadius: 8 },
+  error: { fontSize: 16, color: '#B00020' },
 });
