@@ -2,6 +2,7 @@
   "expo": {
     "name": "bragam-app",
     "slug": "bragam-app",
+    "scheme": "bragam",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -35,6 +36,8 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      ["expo-audio", { "enableBackgroundPlayback": true, "recordAudioAndroid": false, "microphonePermission": false }],
+      "expo-router",
       "expo-font"
     ]
   }
