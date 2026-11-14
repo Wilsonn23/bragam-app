@@ -9,6 +9,7 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  Platform,
 } from 'react-native';
 import MapView, {
   Marker,
@@ -28,7 +29,7 @@ import {
 } from '../constants/bragaMapData';
 
 // Sesuaikan IP komputer & PORT dengan yang ada di backend/.env
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.46.161.81:5000';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.32.115.68:5000';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 275;
@@ -55,6 +56,29 @@ const RATING_OPTIONS = [
   { label: '3+ ★', value: '3' },
   { label: '4+ ★', value: '4' },
 ];
+
+function normalizePoiItem(item) {
+  const localMeta = BRAGA_POIS.find((b) => b.id === item.id) || {};
+  const lat = Number(
+    item.coordinate?.latitude ?? item.latitude ?? item.lat ?? localMeta.latitude
+  );
+  const lng = Number(
+    item.coordinate?.longitude ?? item.longitude ?? item.lng ?? localMeta.longitude
+  );
+
+  return {
+    ...localMeta,
+    ...item,
+    latitude: lat,
+    longitude: lng,
+    coordinate: {
+      latitude: Number.isFinite(lat) ? lat : BRAGA_REGION.latitude,
+      longitude: Number.isFinite(lng) ? lng : BRAGA_REGION.longitude,
+    },
+    rating: String(item.rating ?? localMeta.rating ?? '4.6'),
+    distance: item.distance || localMeta.distance || `${item.triggerRadiusMeters || 10}m`,
+  };
+}
 
 export default function ExploreScreen({
   windowShrink = 0,
@@ -109,21 +133,7 @@ export default function ExploreScreen({
       .then((res) => res.json())
       .then((json) => {
         if (Array.isArray(json.data) && json.data.length > 0) {
-          setSheetPois(
-            json.data.map((item) => ({
-              ...item,
-              coordinate:
-                item.coordinate ||
-                (Number.isFinite(item.latitude) && Number.isFinite(item.longitude)
-                  ? { latitude: item.latitude, longitude: item.longitude }
-                  : {
-                      latitude: BRAGA_REGION.latitude,
-                      longitude: BRAGA_REGION.longitude,
-                    }),
-              rating: String(item.rating ?? '5.0'),
-              distance: item.distance || '12km',
-            }))
-          );
+          setSheetPois(json.data.map(normalizePoiItem));
         } else if (Array.isArray(json.data)) {
           setSheetPois([]);
         }
@@ -231,18 +241,34 @@ export default function ExploreScreen({
   );
 
   const activeDropdown = getDropdownConfig();
-  const mapMarkers = sheetPois.length > 0 ? sheetPois : BRAGA_POIS;
+
+  const hasActiveFilter =
+    selectedCategory !== 'Semua' ||
+    selectedTime !== 'Semua' ||
+    selectedEnv !== 'Semua' ||
+    selectedRating !== '0';
+
+  const fallbackPois = (Array.isArray(pois) && pois.length > 0 ? pois : BRAGA_POIS).map(
+    normalizePoiItem
+  );
+
+  const displayPois = hasActiveFilter
+    ? sheetPois
+    : sheetPois.length > 0
+    ? sheetPois
+    : fallbackPois;
 
   return (
     <View style={styles.root}>
-      {/* Google Maps Canvas */}
+      {/* Google Maps / Apple Maps Canvas */}
       <View style={styles.mapCanvas}>
         <MapView
           ref={mapRef}
-          provider={PROVIDER_GOOGLE}
+          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           style={StyleSheet.absoluteFill}
           initialRegion={BRAGA_REGION}
-          customMapStyle={BRAGA_GRAY_MAP_STYLE}
+          customMapStyle={Platform.OS === 'android' ? BRAGA_GRAY_MAP_STYLE : undefined}
+          userInterfaceStyle="light"
           showsUserLocation={true}
           showsMyLocationButton={false}
           showsCompass={false}
@@ -263,36 +289,44 @@ export default function ExploreScreen({
           />
 
           {/* Marker POI di Jl. Braga */}
-          {pois.map((poi) => (
-            <Marker
-              key={String(poi.id)}
-              coordinate={{
-              latitude: Number(poi.latitude),
-              longitude: Number(poi.longitude),
-              }}
-              onPress={() => {
-                setSelectedMarker(poi);
-                mapRef.current?.animateToRegion(
-                  {
-                    latitude: Number(poi.latitude),
-                    longitude: Number(poi.longitude),
-                    latitudeDelta: 0.004,
-                    longitudeDelta: 0.004,
-                  },
-                  400
-                );
-              }}
-            >
-              <View style={styles.customMarkerRow}>
-                <View style={styles.teardropPin}>
-                  <View style={styles.pinInnerHole} />
+          {displayPois.map((poi) => {
+            const lat = Number(
+              poi.coordinate?.latitude ?? poi.latitude ?? poi.lat
+            );
+            const lng = Number(
+              poi.coordinate?.longitude ?? poi.longitude ?? poi.lng
+            );
+
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+            return (
+              <Marker
+                key={String(poi.id)}
+                coordinate={{ latitude: lat, longitude: lng }}
+                onPress={() => {
+                  setSelectedMarker(poi);
+                  mapRef.current?.animateToRegion(
+                    {
+                      latitude: lat,
+                      longitude: lng,
+                      latitudeDelta: 0.004,
+                      longitudeDelta: 0.004,
+                    },
+                    400
+                  );
+                }}
+              >
+                <View style={styles.customMarkerRow}>
+                  <View style={styles.teardropPin}>
+                    <View style={styles.pinInnerHole} />
+                  </View>
+                  <View style={styles.markerLabelBadge}>
+                    <Text style={styles.mapLabelText}>{poi.name}</Text>
+                  </View>
                 </View>
-                <View style={styles.markerLabelBadge}>
-                  <Text style={styles.mapLabelText}>{poi.name}</Text>
-                </View>
-              </View>
-            </Marker>
-          ))}
+              </Marker>
+            );
+          })}
         </MapView>
 
         {/* Top Floating Buttons: Tombol Pencarian & Bookmark */}
@@ -432,12 +466,12 @@ export default function ExploreScreen({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.cardsScrollContent}
         >
-          {pois.map((poi, idx) => (
+          {displayPois.map((poi, idx) => (
             <View
               key={`${activeSegment}-${poi.id}`}
               style={[
                 styles.poiCardSection,
-                idx !== pois.length - 1 && styles.poiCardDivider,
+                idx !== displayPois.length - 1 && styles.poiCardDivider,
               ]}
             >
               <ScrollView
