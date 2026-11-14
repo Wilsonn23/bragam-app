@@ -1,16 +1,30 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "bragam-app",
+    "slug": "bragam-app",
     "scheme": "bragam",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bragam.app",
+      "config": {
+        "googleMapsApiKey": "AIzaSyDPUlZF6q4k62EfUOaNxAO_RPWECF9XbKA"
+      }
     },
     "android": {
+      "package": "com.bragam.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyDPUlZF6q4k62EfUOaNxAO_RPWECF9XbKA"
+        }
+      },
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

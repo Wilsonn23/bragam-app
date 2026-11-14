@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,30 +6,100 @@ import {
   StyleSheet,
   SafeAreaView,
 } from 'react-native';
-import Svg, { Path, Circle } from 'react-native-svg';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import {
   Ionicons,
   MaterialIcons,
   MaterialCommunityIcons,
 } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
+import {
+  BRAGA_REGION,
+  BRAGA_POIS,
+  BRAGA_PURPLE_MAP_STYLE,
+} from '../constants/bragaMapData';
+import { fetchWalkingRoute } from '../utils/directionsApi';
 
-const ROUTE_DOTS = [
-  { x: 185, y: 315 },
-  { x: 193, y: 295 },
-  { x: 198, y: 274 },
-  { x: 200, y: 253 },
-  { x: 200, y: 232 },
-  { x: 200, y: 211 },
-  { x: 200, y: 190 },
-];
+// Koordinat default titik awal pengguna di ruas Jl. Braga
+const DEFAULT_USER_ORIGIN = {
+  latitude: -6.9182,
+  longitude: 107.6093,
+};
 
 export default function NavigationScreen({ poi, onBack }) {
+  const mapRef = useRef(null);
   const destinationName = poi?.name || 'Sweet Cantina';
+
+  // Cari koordinat destinasi dari BRAGA_POIS atau gunakan coordinate dari prop poi
+  const targetPoi =
+    BRAGA_POIS.find(
+      (item) => item.name.toLowerCase() === destinationName.toLowerCase()
+    ) ||
+    (poi?.coordinate ? poi : BRAGA_POIS[1]);
+
   const [isSwapped, setIsSwapped] = useState(false);
+  const [routeCoords, setRouteCoords] = useState([]);
+  const [durationBadge, setDurationBadge] = useState('1 min');
+  const [etaSummary, setEtaSummary] = useState('1 Menit 30 detik (30m)');
+  const [nextInstruction, setNextInstruction] = useState(
+    `Belok serong kiri menuju ${destinationName}`
+  );
 
   const originText = isSwapped ? destinationName : 'Your Location';
   const targetText = isSwapped ? 'Your Location' : destinationName;
+
+  const activeOriginCoord = isSwapped
+    ? targetPoi.coordinate
+    : DEFAULT_USER_ORIGIN;
+  const activeDestCoord = isSwapped
+    ? DEFAULT_USER_ORIGIN
+    : targetPoi.coordinate;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchWalkingRoute(activeOriginCoord, activeDestCoord)
+      .then((res) => {
+        if (!isMounted) return;
+        setRouteCoords(res.coordinates);
+        setDurationBadge(res.durationText);
+        setEtaSummary(`${res.durationText} (${res.distanceText})`);
+        setNextInstruction(res.instruction);
+
+        if (res.coordinates.length > 1) {
+          mapRef.current?.fitToCoordinates(res.coordinates, {
+            edgePadding: { top: 90, right: 60, bottom: 90, left: 60 },
+            animated: true,
+          });
+        }
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        // Fallback garis langsung jika API Key belum aktif atau offline
+        setRouteCoords([activeOriginCoord, activeDestCoord]);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [destinationName, isSwapped]);
+
+  const handleRecenter = () => {
+    if (routeCoords.length > 1) {
+      mapRef.current?.fitToCoordinates(routeCoords, {
+        edgePadding: { top: 90, right: 60, bottom: 90, left: 60 },
+        animated: true,
+      });
+    } else {
+      mapRef.current?.animateToRegion(BRAGA_REGION, 600);
+    }
+  };
+
+  // Titik tengah rute untuk menempatkan badge durasi jalan kaki
+  const midPoint =
+    routeCoords.length > 0
+      ? routeCoords[Math.floor(routeCoords.length / 2)]
+      : null;
 
   return (
     <View style={styles.root}>
@@ -72,7 +142,7 @@ export default function NavigationScreen({ poi, onBack }) {
             </TouchableOpacity>
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={() => setIsSwapped(!isSwapped)}
+              onPress={() => setIsSwapped((prev) => !prev)}
             >
               <MaterialCommunityIcons
                 name="swap-vertical"
@@ -84,61 +154,71 @@ export default function NavigationScreen({ poi, onBack }) {
         </View>
       </SafeAreaView>
 
-      {/* Map View Area */}
+      {/* Google Maps View Area */}
       <View style={styles.mapCanvas}>
-        <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
-          {/* Background Roads */}
-          <Path
-            d="M -10 90 Q 150 130 240 10 T 420 110"
-            stroke={COLORS.white}
-            strokeWidth="12"
-            fill="none"
-          />
-          <Path
-            d="M 110 -10 L 140 420"
-            stroke={COLORS.white}
-            strokeWidth="10"
-            fill="none"
-          />
-          <Path
-            d="M 275 -10 Q 250 220 330 450"
-            stroke={COLORS.white}
-            strokeWidth="14"
-            fill="none"
-          />
-
-          {/* Dotted Navigation Route */}
-          {ROUTE_DOTS.map((dot, idx) => (
-            <Circle
-              key={idx}
-              cx={dot.x}
-              cy={dot.y}
-              r={5.5}
-              fill={COLORS.darkPurple}
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_GOOGLE}
+          style={StyleSheet.absoluteFill}
+          initialRegion={BRAGA_REGION}
+          customMapStyle={BRAGA_PURPLE_MAP_STYLE}
+          showsUserLocation={true}
+          showsMyLocationButton={false}
+          showsCompass={false}
+        >
+          {/* Dotted Walking Route Polyline */}
+          {routeCoords.length > 0 && (
+            <Polyline
+              coordinates={routeCoords}
+              strokeColor={COLORS.darkPurple}
+              strokeWidth={6}
+              lineDashPattern={[1, 10]}
             />
-          ))}
-        </Svg>
+          )}
 
-        {/* Destination Marker */}
-        <View style={[styles.markerGroup, { top: 135, left: 178 }]}>
-          <View style={styles.teardropPin}>
-            <View style={styles.pinHole} />
-          </View>
-          <Text style={styles.markerLabel}>{destinationName}</Text>
-        </View>
+          {/* Origin Marker */}
+          <Marker coordinate={activeOriginCoord} anchor={{ x: 0.5, y: 0.5 }}>
+            <View style={styles.userPuck} />
+          </Marker>
 
-        {/* Walking Duration Speech Bubble */}
-        <View style={[styles.walkBubble, { top: 205, left: 108 }]}>
-          <MaterialIcons name="directions-walk" size={16} color={COLORS.white} />
-          <Text style={styles.walkBubbleText}>1 min</Text>
-        </View>
+          {/* Destination Marker */}
+          <Marker coordinate={activeDestCoord}>
+            <View style={styles.markerGroup}>
+              <View style={styles.teardropPin}>
+                <View style={styles.pinHole} />
+              </View>
+              <View style={styles.markerLabelBadge}>
+                <Text style={styles.markerLabel}>{targetText}</Text>
+              </View>
+            </View>
+          </Marker>
 
-        {/* User Location Puck */}
-        <View style={[styles.userPuck, { top: 325, left: 172 }]} />
+          {/* Walking Duration Bubble on Route Midpoint */}
+          {midPoint && (
+            <Marker coordinate={midPoint} anchor={{ x: 0.5, y: 0.5 }}>
+              <View style={styles.walkBubble}>
+                <MaterialIcons
+                  name="directions-walk"
+                  size={15}
+                  color={COLORS.white}
+                />
+                <Text style={styles.walkBubbleText}>{durationBadge}</Text>
+              </View>
+            </Marker>
+          )}
+        </MapView>
 
         {/* Recenter Button */}
-        <TouchableOpacity activeOpacity={0.85} style={styles.recenterBtn}>
-          <MaterialIcons name="my-location" size={24} color={COLORS.darkPurple} />
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={handleRecenter}
+          style={styles.recenterBtn}
+        >
+          <MaterialIcons
+            name="my-location"
+            size={24}
+            color={COLORS.darkPurple}
+          />
         </TouchableOpacity>
       </View>
 
@@ -147,7 +227,7 @@ export default function NavigationScreen({ poi, onBack }) {
         <View style={styles.dragHandle} />
 
         <View style={styles.etaRow}>
-          <Text style={styles.etaText}>1 Menit 30 detik (30m)</Text>
+          <Text style={styles.etaText}>{etaSummary}</Text>
         </View>
 
         <View style={styles.directionBanner}>
@@ -156,9 +236,7 @@ export default function NavigationScreen({ poi, onBack }) {
             size={28}
             color={COLORS.darkPurple}
           />
-          <Text style={styles.directionInstruction}>
-            Belok serong kiri menuju {destinationName}
-          </Text>
+          <Text style={styles.directionInstruction}>{nextInstruction}</Text>
         </View>
       </View>
     </View>
@@ -232,32 +310,37 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   markerGroup: {
-    position: 'absolute',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   teardropPin: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#8B65D4',
     alignItems: 'center',
     justifyContent: 'center',
+    elevation: 3,
   },
   pinHole: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: COLORS.lavenderTint,
   },
+  markerLabelBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
   markerLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.primaryPurple,
   },
   walkBubble: {
-    position: 'absolute',
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.darkPurple,
@@ -265,14 +348,14 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: RADIUS.pill,
     gap: 4,
+    elevation: 3,
   },
   walkBubbleText: {
     color: COLORS.white,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   userPuck: {
-    position: 'absolute',
     width: 18,
     height: 18,
     borderRadius: 9,
