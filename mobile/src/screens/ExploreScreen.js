@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,125 +8,43 @@ import {
   SafeAreaView,
   Animated,
   PanResponder,
-  useWindowDimensions,
+  Dimensions,
 } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 import { WireframeImageBox, PoiDetailFooter } from '../components/PoiCardComponents';
 import SearchPoiOverlay from '../components/SearchPoiOverlay';
+import {
+  BRAGA_REGION,
+  BRAGA_POIS,
+  BRAGA_PURPLE_MAP_STYLE,
+} from '../constants/bragaMapData';
 
-const API_BASE_URL = 'http://10.46.161.81:5000';
-
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 275;
-
-const FALLBACK_ITEMS = [
-  { id: 'p1', name: 'Braga Citywalk', distance: '12km', rating: '5.0' },
-  { id: 'p2', name: 'Braga Citywalk', distance: '12km', rating: '5.0' },
-  { id: 'p3', name: 'Braga Citywalk', distance: '12km', rating: '5.0' },
-];
-
-const TIME_OPTIONS = [
-  { label: 'All Time', value: 'Semua' },
-  { label: 'Morning (Pagi)', value: 'pagi' },
-  { label: 'Afternoon (Siang)', value: 'siang' },
-  { label: 'Night (Malam)', value: 'malam' },
-];
-
-const ENV_OPTIONS = [
-  { label: 'All Area', value: 'Semua' },
-  { label: 'Indoor', value: 'indoor' },
-  { label: 'Outdoor', value: 'outdoor' },
-  { label: 'Both', value: 'both' },
-];
-
-const RATING_OPTIONS = [
-  { label: 'All Rating', value: '0' },
-  { label: '1+ ★', value: '1' },
-  { label: '2+ ★', value: '2' },
-  { label: '3+ ★', value: '3' },
-  { label: '4+ ★', value: '4' },
-];
+const EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.78;
 
 export default function ExploreScreen({
-  windowShrink = 0,
   onOpenDetail,
   onOpenDirections,
   onSimulateGeofence,
 }) {
-  const { height: screenHeight } = useWindowDimensions();
-  const expandedHeight = screenHeight * 0.78;
+  const mapRef = useRef(null);
+  const [selectedMarker, setSelectedMarker] = useState(BRAGA_POIS[0]);
   const [activeSegment, setActiveSegment] = useState('nearby'); // 'nearby' | 'recommendation'
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // State 4 Dropdown Filter pada Bottom Sheet
-  const [categoryOptions, setCategoryOptions] = useState([
-    { label: 'Category', value: 'Semua' },
-  ]);
-  const [selectedCategory, setSelectedCategory] = useState('Semua');
-  const [selectedTime, setSelectedTime] = useState('Semua');
-  const [selectedEnv, setSelectedEnv] = useState('Semua');
-  const [selectedRating, setSelectedRating] = useState('0');
-  const [openDropdown, setOpenDropdown] = useState(null);
-  const [sheetPois, setSheetPois] = useState(FALLBACK_ITEMS);
-
-  useEffect(() => {
-    fetch(`${API_BASE_URL}/api/categories`)
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.categories && json.categories.length > 0) {
-          setCategoryOptions(
-            json.categories.map((cat) => ({
-              label: cat === 'Semua' ? 'Category' : cat,
-              value: cat,
-            }))
-          );
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const params = new URLSearchParams({
-      q: '',
-      category: selectedCategory,
-      time_category: selectedTime,
-      environment: selectedEnv,
-      min_rating: selectedRating,
-    });
-
-    fetch(`${API_BASE_URL}/api/pois/search?${params.toString()}`)
-      .then((res) => res.json())
-      .then((json) => {
-        if (Array.isArray(json.data)) {
-          setSheetPois(
-            json.data.map((item) => ({
-              ...item,
-              rating: String(item.rating ?? '5.0'),
-              distance: item.distance || '-',
-            }))
-          );
-        }
-      })
-      .catch(() => {});
-  }, [selectedCategory, selectedTime, selectedEnv, selectedRating]);
-
   const sheetHeight = useRef(new Animated.Value(COLLAPSED_HEIGHT)).current;
   const currentHeightRef = useRef(COLLAPSED_HEIGHT);
-  const dragStartHeightRef = useRef(COLLAPSED_HEIGHT);
-  const expandedHeightRef = useRef(expandedHeight);
 
-  useEffect(() => {
-    expandedHeightRef.current = expandedHeight;
-    if (isExpanded) {
-      currentHeightRef.current = expandedHeight;
-      sheetHeight.setValue(expandedHeight);
-    }
-  }, [expandedHeight, isExpanded, currentHeightRef, sheetHeight]);
+  const handleRecenterBraga = () => {
+    mapRef.current?.animateToRegion(BRAGA_REGION, 600);
+  };
 
   const animateSheet = (toExpanded) => {
-    const target = toExpanded ? expandedHeightRef.current : COLLAPSED_HEIGHT;
+    const target = toExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
     setIsExpanded(toExpanded);
     currentHeightRef.current = target;
     Animated.spring(sheetHeight, {
@@ -139,16 +57,11 @@ export default function ExploreScreen({
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
-      onPanResponderGrant: () => {
-        dragStartHeightRef.current = currentHeightRef.current;
-      },
       onPanResponderMove: (_, gesture) => {
-        const nextHeight = Math.min(
-          expandedHeightRef.current,
-          Math.max(COLLAPSED_HEIGHT, dragStartHeightRef.current - gesture.dy)
-        );
-        currentHeightRef.current = nextHeight;
-        sheetHeight.setValue(nextHeight);
+        const nextHeight = currentHeightRef.current - gesture.dy;
+        if (nextHeight >= COLLAPSED_HEIGHT - 20 && nextHeight <= EXPANDED_HEIGHT + 20) {
+          sheetHeight.setValue(nextHeight);
+        }
       },
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dy < -40) {
@@ -156,160 +69,85 @@ export default function ExploreScreen({
         } else if (gesture.dy > 40) {
           animateSheet(false);
         } else {
-          animateSheet(
-            currentHeightRef.current >
-              (COLLAPSED_HEIGHT + expandedHeightRef.current) / 2
-          );
+          animateSheet(currentHeightRef.current > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
         }
       },
     })
   ).current;
 
-  const getDropdownConfig = () => {
-    switch (openDropdown) {
-      case 'category':
-        return {
-          title: 'Select Category',
-          options: categoryOptions,
-          value: selectedCategory,
-          onSelect: setSelectedCategory,
-        };
-      case 'time':
-        return {
-          title: 'Select Time',
-          options: TIME_OPTIONS,
-          value: selectedTime,
-          onSelect: setSelectedTime,
-        };
-      case 'env':
-        return {
-          title: 'Select Environment',
-          options: ENV_OPTIONS,
-          value: selectedEnv,
-          onSelect: setSelectedEnv,
-        };
-      case 'rating':
-        return {
-          title: 'Minimum Rating',
-          options: RATING_OPTIONS,
-          value: selectedRating,
-          onSelect: setSelectedRating,
-        };
-      default:
-        return null;
-    }
-  };
-
-  const getPillLabel = (options, value, fallback) => {
-    if (value === 'Semua' || value === '0') return fallback;
-    return options.find((o) => o.value === value)?.label || fallback;
-  };
-
-  const renderFilterPill = (key, label, isActive) => (
-    <TouchableOpacity
-      key={key}
-      activeOpacity={0.85}
-      onPress={() => setOpenDropdown(key)}
-      style={[styles.filterPill, isActive && styles.filterPillActive]}
-    >
-      <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
-        {label}
-      </Text>
-      <View style={[styles.filterChevronCircle, isActive && styles.filterChevronCircleActive]}>
-        <Ionicons
-          name="chevron-down"
-          size={12}
-          color={isActive ? COLORS.darkPurple : COLORS.white}
-        />
-      </View>
-    </TouchableOpacity>
-  );
-
-  const activeDropdown = getDropdownConfig();
-
   return (
     <View style={styles.root}>
-      {/* Map Canvas */}
+      {/* Google Maps Canvas */}
       <View style={styles.mapCanvas}>
-        <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
-          <Path
-            d="M -20 120 Q 140 160 220 40 T 420 140"
-            stroke={COLORS.white}
-            strokeWidth="12"
-            fill="none"
-          />
-          <Path
-            d="M 80 -10 L 160 280 L 110 520"
-            stroke={COLORS.white}
-            strokeWidth="10"
-            fill="none"
-          />
-          <Path
-            d="M 280 -10 Q 250 220 330 480"
-            stroke={COLORS.white}
-            strokeWidth="14"
-            fill="none"
-          />
-          <Path
-            d="M -10 310 Q 190 290 410 350"
-            stroke={COLORS.white}
-            strokeWidth="8"
-            fill="none"
-          />
-        </Svg>
-
-        {/* Top Floating Icons: Lup Pencarian & Bookmark */}
-        <SafeAreaView style={styles.topOverlay}>
-          <View style={styles.topActionRow}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => setIsSearchOpen(true)}
-              style={styles.circleActionBtn}
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_GOOGLE}
+          style={StyleSheet.absoluteFill}
+          initialRegion={BRAGA_REGION}
+          customMapStyle={BRAGA_PURPLE_MAP_STYLE}
+          showsUserLocation={true}
+          showsMyLocationButton={false}
+          showsCompass={false}
+        >
+          {BRAGA_POIS.map((poi) => (
+            <Marker
+              key={poi.id}
+              coordinate={poi.coordinate}
+              onPress={() => {
+                setSelectedMarker(poi);
+                mapRef.current?.animateToRegion(
+                  {
+                    ...poi.coordinate,
+                    latitudeDelta: 0.004,
+                    longitudeDelta: 0.004,
+                  },
+                  400
+                );
+              }}
             >
+              <View style={styles.customMarkerRow}>
+                <View style={styles.teardropPin}>
+                  <View style={styles.pinInnerHole} />
+                </View>
+                <View style={styles.markerLabelBadge}>
+                  <Text style={styles.mapLabelText}>{poi.name}</Text>
+                </View>
+              </View>
+            </Marker>
+          ))}
+        </MapView>
+
+        {/* Top Search Bar Trigger */}
+        <SafeAreaView style={styles.topOverlay}>
+          <View style={styles.searchRow}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setIsSearchOpen(true)}
+              style={styles.searchInputBox}
+            >
+              <Text style={styles.searchPlaceholder}>Type Something...</Text>
               <Ionicons name="search" size={20} color={COLORS.darkPurple} />
             </TouchableOpacity>
 
             <TouchableOpacity
               activeOpacity={0.85}
               onLongPress={onSimulateGeofence}
-              style={styles.circleActionBtn}
+              style={styles.bookmarkCircleBtn}
             >
               <Ionicons name="bookmark" size={20} color={COLORS.darkPurple} />
             </TouchableOpacity>
           </View>
         </SafeAreaView>
-
-        {/* Map Marker 1 */}
-        <View style={[styles.mapMarkerGroup, { top: '23%', left: '28%' }]}>
-          <View style={styles.teardropPin}>
-            <View style={styles.pinInnerHole} />
-          </View>
-          <Text style={styles.mapLabelText}>Braga Citywalk</Text>
-        </View>
-
-        {/* User Location Puck */}
-        <View style={[styles.userPuckWrapper, { top: '46%', left: '49%' }]}>
-          <View style={styles.userPuckDot} />
-        </View>
-
-        {/* Map Marker 2 */}
-        <View style={[styles.mapMarkerGroup, { top: '53%', left: '48%' }]}>
-          <View style={styles.teardropPin}>
-            <View style={styles.pinInnerHole} />
-          </View>
-          <Text style={styles.mapLabelText}>Sweet Cantina</Text>
-        </View>
       </View>
 
       {/* Draggable Bottom Sheet (Nearby You & Contextual Recommendation) */}
-      <Animated.View
-        style={[
-          styles.bottomSheet,
-          { height: sheetHeight, bottom: -windowShrink },
-        ]}
-      >
+      <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
         {/* Floating Recenter Button above sheet */}
-        <TouchableOpacity activeOpacity={0.85} style={styles.recenterBtn}>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={handleRecenterBraga}
+          style={styles.recenterBtn}
+        >
           <MaterialIcons name="my-location" size={24} color={COLORS.darkPurple} />
         </TouchableOpacity>
 
@@ -362,62 +200,49 @@ export default function ExploreScreen({
             </TouchableOpacity>
           </View>
 
-          {/* 4 Dropdown Filter Pills Row (tampil saat sheet digeser ke atas) */}
+          {/* Filter Pills Row (tampil saat sheet digeser ke atas) */}
           {isExpanded && (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filterRow}
             >
-              <TouchableOpacity
-                style={styles.filterIconBtn}
-                onPress={() => {
-                  setSelectedCategory('Semua');
-                  setSelectedTime('Semua');
-                  setSelectedEnv('Semua');
-                  setSelectedRating('0');
-                }}
-              >
+              <TouchableOpacity style={styles.filterIconBtn}>
                 <Ionicons name="options" size={20} color={COLORS.primaryPurple} />
               </TouchableOpacity>
 
-              {renderFilterPill(
-                'category',
-                getPillLabel(categoryOptions, selectedCategory, 'Category'),
-                selectedCategory !== 'Semua'
-              )}
-              {renderFilterPill(
-                'time',
-                getPillLabel(TIME_OPTIONS, selectedTime, 'Time'),
-                selectedTime !== 'Semua'
-              )}
-              {renderFilterPill(
-                'env',
-                getPillLabel(ENV_OPTIONS, selectedEnv, 'Environment'),
-                selectedEnv !== 'Semua'
-              )}
-              {renderFilterPill(
-                'rating',
-                getPillLabel(RATING_OPTIONS, selectedRating, 'Rating'),
-                selectedRating !== '0'
-              )}
+              <TouchableOpacity style={styles.filterPill}>
+                <Text style={styles.filterPillText}>Destination</Text>
+                <View style={styles.filterChevronCircle}>
+                  <Ionicons name="chevron-down" size={12} color={COLORS.white} />
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.filterPill}>
+                <Text style={styles.filterPillText}>Open at Night</Text>
+                <View style={styles.filterChevronCircle}>
+                  <Ionicons name="chevron-down" size={12} color={COLORS.white} />
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.filterPill}>
+                <Text style={styles.filterPillText}>Top Rated</Text>
+              </TouchableOpacity>
             </ScrollView>
           )}
         </View>
-
-        <View style={styles.scrollBoundaryLine} />
 
         {/* Scrollable POI Cards List */}
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.cardsScrollContent}
         >
-          {sheetPois.map((poi, idx) => (
+          {BRAGA_POIS.map((poi, idx) => (
             <View
               key={`${activeSegment}-${poi.id}`}
               style={[
                 styles.poiCardSection,
-                idx !== sheetPois.length - 1 && styles.poiCardDivider,
+                idx !== BRAGA_POIS.length - 1 && styles.poiCardDivider,
               ]}
             >
               <ScrollView
@@ -444,63 +269,9 @@ export default function ExploreScreen({
         </ScrollView>
       </Animated.View>
 
-      {/* Dropdown Picker Overlay untuk Filter Bottom Sheet */}
-      {activeDropdown && (
-        <TouchableOpacity
-          style={styles.dropdownBackdrop}
-          activeOpacity={1}
-          onPress={() => setOpenDropdown(null)}
-        >
-          <View style={styles.dropdownSheet} onStartShouldSetResponder={() => true}>
-            <View style={styles.dropdownSheetHeader}>
-              <Text style={styles.dropdownSheetTitle}>{activeDropdown.title}</Text>
-              <TouchableOpacity onPress={() => setOpenDropdown(null)}>
-                <Ionicons name="close" size={22} color={COLORS.darkPurple} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={{ maxHeight: 280 }}>
-              {activeDropdown.options.map((opt) => {
-                const isSelected = opt.value === activeDropdown.value;
-                return (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={[
-                      styles.dropdownOptionRow,
-                      isSelected && styles.dropdownOptionRowSelected,
-                    ]}
-                    onPress={() => {
-                      activeDropdown.onSelect(opt.value);
-                      setOpenDropdown(null);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.dropdownOptionText,
-                        isSelected && styles.dropdownOptionTextSelected,
-                      ]}
-                    >
-                      {opt.label}
-                    </Text>
-                    {isSelected && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={20}
-                        color={COLORS.darkPurple}
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      )}
-
-      {/* Search POI Slider */}
+      {/* Search POI Overlay */}
       <SearchPoiOverlay
         visible={isSearchOpen}
-        windowShrink={windowShrink}
         onClose={() => setIsSearchOpen(false)}
         onSelectPoi={(poi) => onOpenDetail?.(poi)}
       />
@@ -521,15 +292,31 @@ const styles = StyleSheet.create({
   topOverlay: {
     zIndex: 10,
   },
-  topActionRow: {
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
     paddingHorizontal: 16,
-    paddingTop: 48,
+    paddingTop: 12,
     gap: 10,
   },
-  circleActionBtn: {
+  searchInputBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.white,
+    borderWidth: 2,
+    borderColor: COLORS.primaryPurple,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 16,
+    height: 46,
+  },
+  searchPlaceholder: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    fontStyle: 'italic',
+  },
+  bookmarkCircleBtn: {
     width: 46,
     height: 46,
     borderRadius: 23,
@@ -538,50 +325,37 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primaryPurple,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 3,
   },
-  mapMarkerGroup: {
-    position: 'absolute',
+  customMarkerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   teardropPin: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#8B65D4',
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 3,
   },
   pinInnerHole: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: COLORS.lavenderTint,
+  },
+  markerLabelBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
   mapLabelText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.primaryPurple,
-  },
-  userPuckWrapper: {
-    position: 'absolute',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(91, 43, 191, 0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  userPuckDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: COLORS.lavenderTint,
-    borderWidth: 2.5,
-    borderColor: COLORS.primaryPurple,
   },
   recenterBtn: {
     position: 'absolute',
@@ -611,12 +385,6 @@ const styles = StyleSheet.create({
   },
   dragHeaderArea: {
     paddingBottom: 6,
-  },
-  scrollBoundaryLine: {
-    height: 2,
-    marginBottom: 8,
-    borderRadius: 1,
-    backgroundColor: COLORS.primaryPurple,
   },
   dragHandleTouch: {
     paddingVertical: 6,
@@ -670,7 +438,6 @@ const styles = StyleSheet.create({
   filterPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.white,
     borderWidth: 1.5,
     borderColor: COLORS.mediumPurple,
     borderRadius: RADIUS.pill,
@@ -679,17 +446,10 @@ const styles = StyleSheet.create({
     paddingRight: 6,
     gap: 6,
   },
-  filterPillActive: {
-    backgroundColor: COLORS.darkPurple,
-    borderColor: COLORS.darkPurple,
-  },
   filterPillText: {
     fontSize: 12,
     color: COLORS.primaryPurple,
     fontWeight: '500',
-  },
-  filterPillTextActive: {
-    color: COLORS.white,
   },
   filterChevronCircle: {
     width: 18,
@@ -698,9 +458,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.darkPurple,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  filterChevronCircleActive: {
-    backgroundColor: COLORS.white,
   },
   cardsScrollContent: {
     paddingBottom: 24,
@@ -715,52 +472,5 @@ const styles = StyleSheet.create({
   carouselRow: {
     paddingHorizontal: 20,
     gap: 10,
-  },
-  dropdownBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(49, 20, 101, 0.45)',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    zIndex: 50,
-  },
-  dropdownSheet: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1.5,
-    borderColor: COLORS.primaryPurple,
-    padding: 16,
-  },
-  dropdownSheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderSubtle,
-    marginBottom: 6,
-  },
-  dropdownSheetTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-  },
-  dropdownOptionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 11,
-    paddingHorizontal: 10,
-    borderRadius: RADIUS.sm,
-  },
-  dropdownOptionRowSelected: {
-    backgroundColor: COLORS.lavenderTint,
-  },
-  dropdownOptionText: {
-    fontSize: 14,
-    color: COLORS.textPrimary,
-  },
-  dropdownOptionTextSelected: {
-    fontWeight: '700',
-    color: COLORS.darkPurple,
   },
 });

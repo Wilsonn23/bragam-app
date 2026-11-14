@@ -108,20 +108,10 @@ export default function TripRouteSummaryScreen({ trip, onBack }) {
         </Svg>
 
         {/* Start User Puck */}
-        <View
-          style={[
-            styles.userPuck,
-            { top: '17%', left: '9%' },
-          ]}
-        />
+        <View style={[styles.userPuck, { top: 68, left: 36 }]} />
 
         {/* Stop 1 Pin */}
-        <View
-          style={[
-            styles.markerGroup,
-            { top: '11%', left: '28%' },
-          ]}
-        >
+        <View style={[styles.markerGroup, { top: 44, left: 108 }]}>
           <View style={styles.teardropPin}>
             <View style={styles.pinHole} />
           </View>
@@ -129,24 +119,19 @@ export default function TripRouteSummaryScreen({ trip, onBack }) {
         </View>
 
         {/* Walking Badge 1 */}
-        <View style={[styles.walkBubble, { top: '26%', left: '14%' }]}>
+        <View style={[styles.walkBubble, { top: 104, left: 56 }]}>
           <MaterialIcons name="directions-walk" size={15} color={COLORS.white} />
           <Text style={styles.walkBubbleText}>1 min</Text>
         </View>
 
         {/* Walking Badge 2 */}
-        <View style={[styles.walkBubble, { top: '43%', left: '55%' }]}>
+        <View style={[styles.walkBubble, { top: 170, left: 214 }]}>
           <MaterialIcons name="directions-walk" size={15} color={COLORS.white} />
           <Text style={styles.walkBubbleText}>1 min</Text>
         </View>
 
         {/* Stop 2 Pin */}
-        <View
-          style={[
-            styles.markerGroup,
-            { top: '53%', left: '46%' },
-          ]}
-        >
+        <View style={[styles.markerGroup, { top: 212, left: 178 }]}>
           <View style={styles.teardropPin}>
             <View style={styles.pinHole} />
           </View>

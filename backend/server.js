@@ -1,12 +1,28 @@
 const express = require('express');
 const cors = require('cors');
-const loadPoisFromCsv = require('./utils/loadPOIs');
+const { Pool } = require('pg');
+const swaggerUi = require('swagger-ui-express');
+const usersRouter = require('./routes/users');
+const openapiSpec = require('./openapi');
+require('dotenv').config();
 
 const app = express();
 const PORT = 5000;
 
 app.use(cors());
 app.use(express.json());
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
+app.get('/openapi.json', (req, res) => res.json(openapiSpec));
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+});
+
+app.use((req, res, next) => {
+  req.db = pool;
+  next();
+});
 
 const pois = loadPoisFromCsv();
 
@@ -27,106 +43,83 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
-    dataset: 'dataset_poi_braga_pb03_3.csv',
-    total_pois: pois.length,
+    databaseConfigured: Boolean(process.env.DATABASE_URL),
+    message: 'BRAGAm API Server Running',
   });
 });
 
-// Endpoint Kategori Dinamis dari CSV (PB09)
-app.get('/api/categories', (req, res) => {
-  const rawCategories = pois
-    .map((p) => (p.main_category || p.category || '').trim())
-    .filter(Boolean);
-
-  const uniqueCategories = ['Semua', ...new Set(rawCategories)];
-  res.status(200).json({ categories: uniqueCategories });
+app.get('/api/pois', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, name, category, latitude, longitude, radius_meters,
+             description, notification_title, audio_guide_url
+      FROM pois
+      ORDER BY id
+    `);
+    res.json(rows.map(toPoiResponse));
+  } catch (error) {
+    next(error);
+  }
 });
 
-// Endpoint Pencarian & Multi-Filter POI (PB09)
-app.get('/api/pois/search', (req, res) => {
-  const {
-    q = '',
-    category = 'Semua',
-    time_category = 'Semua',
-    environment = 'Semua',
-    min_rating = '0',
-    lat,
-    lng,
-  } = req.query;
+app.get('/api/pois/nearby', async (req, res, next) => {
+  const latitude = Number(req.query.latitude);
+  const longitude = Number(req.query.longitude);
+  const maxRadius = Number(req.query.maxRadius || 15);
 
-  const keyword = q.trim().toLowerCase();
-  const selectedCat = category.trim().toLowerCase();
-  const selectedTime = time_category.trim().toLowerCase();
-  const selectedEnv = environment.trim().toLowerCase();
-  const minRatingVal = parseFloat(min_rating) || 0;
-
-  const hasCoords =
-    lat !== undefined &&
-    lng !== undefined &&
-    !isNaN(parseFloat(lat)) &&
-    !isNaN(parseFloat(lng));
-
-  let results = pois.filter((poi) => {
-    // 1. Filter Kata Kunci
-    const searchableText = [
-      poi.name,
-      poi.category,
-      poi.main_category,
-      poi.sub_category,
-      poi.description,
-      poi.menu_highlights,
-      poi.history,
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-
-    const matchKeyword = keyword === '' || searchableText.includes(keyword);
-
-    // 2. Filter Category
-    const poiCategory = (poi.main_category || poi.category || '').toLowerCase();
-    const matchCategory =
-      selectedCat === 'semua' ||
-      poiCategory === selectedCat ||
-      (poi.category && poi.category.toLowerCase().includes(selectedCat));
-
-    // 3. Filter Time Category (pagi, siang, malam — mendukung nilai gabungan seperti "pagi, siang, malam")
-    const poiTimes = (poi.time_category || '')
-      .split(',')
-      .map((t) => t.trim().toLowerCase())
-      .filter(Boolean);
-    const matchTime = selectedTime === 'semua' || poiTimes.includes(selectedTime);
-
-    // 4. Filter Environment (indoor, outdoor, both)
-    const poiEnv = (poi.environment || '').trim().toLowerCase();
-    const matchEnv = selectedEnv === 'semua' || poiEnv === selectedEnv;
-
-    // 5. Filter Rating Minimum (1+, 2+, 3+, 4+)
-    const matchRating = (poi.rating || 0) >= minRatingVal;
-
-    return matchKeyword && matchCategory && matchTime && matchEnv && matchRating;
-  });
-
-  results = results.map((poi) => ({
-    ...poi,
-    distanceMeters:
-      hasCoords && !isNaN(poi.latitude) && !isNaN(poi.longitude)
-        ? getDistanceMeters(parseFloat(lat), parseFloat(lng), poi.latitude, poi.longitude)
-        : null,
-  }));
-
-  if (hasCoords) {
-    results.sort((a, b) => (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity));
-  } else {
-    results.sort((a, b) => b.rating - a.rating);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+      !Number.isFinite(longitude) || longitude < -180 || longitude > 180 ||
+      !Number.isFinite(maxRadius) || maxRadius <= 0) {
+    return res.status(400).json({ error: 'latitude, longitude, dan maxRadius harus valid.' });
   }
 
-  res.status(200).json({
-    count: results.length,
-    data: results,
-  });
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, name, category, latitude, longitude, radius_meters,
+             description, notification_title, audio_guide_url,
+             ST_Distance(
+               location::geography,
+               ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+             ) AS distance_meters
+      FROM pois
+      WHERE ST_DWithin(
+        location::geography,
+        ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
+        LEAST(radius_meters, $3)
+      )
+      ORDER BY distance_meters ASC
+      LIMIT 1
+    `, [latitude, longitude, maxRadius]);
+    res.json(rows.length ? toPoiResponse(rows[0]) : null);
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server BRAGAm (PB09) berjalan di port ${PORT} — ${pois.length} POI dimuat.`);
+app.use('/api/users', usersRouter);
+
+const PORT = process.env.PORT || 5000;
+app.use((error, req, res, next) => {
+  console.error(error);
+  res.status(500).json({ error: 'Database request failed.' });
+});
+
+function toPoiResponse(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
+    triggerRadiusMeters: Number(row.radius_meters),
+    shortDescription: row.description || '',
+    notificationTitle: row.notification_title || '',
+    imageUrl: undefined,
+    audioGuideUrl: row.audio_guide_url || undefined,
+    distanceMeters: row.distance_meters === undefined ? undefined : Number(row.distance_meters),
+  };
+}
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
