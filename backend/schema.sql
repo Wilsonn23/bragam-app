@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS pois (
     longitude DOUBLE PRECISION NOT NULL CHECK (longitude BETWEEN -180 AND 180),
     location geometry(Point, 4326),
     radius_meters INTEGER NOT NULL DEFAULT 10 CHECK (radius_meters > 0),
-    cooldown_seconds INTEGER NOT NULL DEFAULT 300 CHECK (cooldown_seconds >= 0),
+    cooldown_seconds INTEGER NOT NULL DEFAULT 60 CHECK (cooldown_seconds >= 0),
     description TEXT,
     history TEXT,
     audio_guide_url VARCHAR(255),

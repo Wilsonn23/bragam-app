@@ -23,7 +23,7 @@ Dokumen ini berisi spesifikasi, skema, dan panduan integrasi dataset **Point of 
 | `latitude` | `DOUBLE PRECISION`| Float | Koordinat Lintang (WGS 84) | `-6.91775` |
 | `longitude` | `DOUBLE PRECISION`| Float | Koordinat Bujur (WGS 84) | `107.60912` |
 | `radius_meters` | `INTEGER` | Integer | Batas radius pemicuan *geofence* (10–15m) | `10` |
-| `cooldown_seconds`| `INTEGER` | Integer | Durasi jeda pemicuan ulang notifikasi (detik) | `300` |
+| `cooldown_seconds`| `INTEGER` | Integer | Durasi jeda pemicuan ulang notifikasi (detik) | `60` |
 | `description` | `TEXT` | String | Deskripsi singkat keunggulan & suasana POI | `Restoran legendaris menyajikan menu...` |
 | `history` | `TEXT` | String | Sejarah / cerita latar belakang destinasi | `Berdiri sejak tahun 1929...` |
 | `audio_guide_url` | `VARCHAR(255)` | String | URL publik aset suara narasi (*Audio Guide*) | `https://assets.bragam.id/audio/p01.mp3` |
@@ -59,7 +59,7 @@ CREATE TABLE pois (
     longitude DOUBLE PRECISION NOT NULL,
     location GEOMETRY(Point, 4326), -- Kolom Geometris PostGIS (WGS 84)
     radius_meters INT DEFAULT 10,
-    cooldown_seconds INT DEFAULT 300,
+    cooldown_seconds INT DEFAULT 60,
     description TEXT,
     history TEXT,
     audio_guide_url VARCHAR(255),

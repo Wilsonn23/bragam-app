@@ -4,7 +4,7 @@ import Svg, { Line } from 'react-native-svg';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from './theme';
 
-export function WireframeImageBox({ width = '100%', height = 160, style }) {
+export function WireframeImageBox({ width = /** @type {number | string} */ ('100%'), height = 160, style = undefined }) {
   return (
     <View style={[styles.imagePlaceholder, { width, height }, style]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -17,12 +17,12 @@ export function WireframeImageBox({ width = '100%', height = 160, style }) {
 
 export function PoiDetailFooter({
   name = 'Braga Citywalk',
-  distance = '12km',
-  rating = '5.0',
+  distance = undefined,
+  rating = undefined,
   onCheckDetail,
   onDirections,
-  onSave,
-  onAddToItinerary,
+  onSave = undefined,
+  onAddToItinerary = undefined,
 }) {
   return (
     <View style={styles.footerWrapper}>
@@ -32,14 +32,14 @@ export function PoiDetailFooter({
           <View style={styles.pinBadge}>
             <Ionicons name="location" size={18} color={COLORS.darkPurple} />
           </View>
-          <Text style={styles.distanceText}>{distance}</Text>
+          {distance && <Text style={styles.distanceText}>{distance}</Text>}
         </View>
 
         <View style={styles.titleCol}>
           <Text style={styles.poiTitle} numberOfLines={1}>
             {name}
           </Text>
-          <View style={styles.ratingRow}>
+          {rating && <View style={styles.ratingRow}>
             <Text style={styles.ratingText}>{rating}</Text>
             {[1, 2, 3, 4].map((star) => (
               <Ionicons
@@ -50,7 +50,7 @@ export function PoiDetailFooter({
                 style={{ marginLeft: 2 }}
               />
             ))}
-          </View>
+          </View>}
         </View>
 
         <TouchableOpacity

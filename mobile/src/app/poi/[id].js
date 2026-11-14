@@ -5,17 +5,23 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ActionButton } from '../../components/ActionButton';
 import { theme } from '../../components/theme';
 import { useGuideAudio } from '../../audio/AudioProvider';
+import { usePois } from '../../poi/PoiProvider';
 import { findPoi } from '../../poi/detail';
 
-const fixtures = __DEV__ ? require('../../dev/fixtures').testPois : null;
 const text = value => typeof value === 'string' && value.trim() ? value : null;
 
 export default function PoiDetail() {
-  const { id, simulation } = useLocalSearchParams();
-  const poi = findPoi(id, __DEV__ && simulation === '1' ? fixtures : undefined);
+  const { id } = useLocalSearchParams();
+  const data = usePois();
+  const poi = findPoi(id, data.records);
   const audio = useGuideAudio();
   const [failedImage, setFailedImage] = useState(null);
   const back = () => router.canGoBack() ? router.back() : router.replace('/');
+  if (data.status === 'loading' || data.status === 'error') return <SafeAreaView style={styles.page}><View style={styles.content}>
+    <Text style={styles.body}>{data.error || 'Memuat destinasi…'}</Text>
+    {data.error && <ActionButton label="Coba lagi" onPress={data.retry} />}
+    <ActionButton label="Kembali" onPress={back} />
+  </View></SafeAreaView>;
   if (!poi) return <SafeAreaView style={styles.page}><View style={styles.content}>
     <Text accessibilityRole="header" style={styles.title}>Destinasi tidak ditemukan</Text>
     <Text style={styles.body}>Data destinasi tidak tersedia.</Text>

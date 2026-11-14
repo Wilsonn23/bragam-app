@@ -36,9 +36,17 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      ["expo-audio", { "enableBackgroundPlayback": true, "recordAudioAndroid": false, "microphonePermission": false }],
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true,
+          "recordAudioAndroid": false,
+          "microphonePermission": false
+        }
+      ],
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-asset"
     ]
   }
 }

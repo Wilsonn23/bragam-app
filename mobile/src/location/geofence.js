@@ -36,7 +36,7 @@ class GeofenceController {
     const events = [];
     for (const poi of this.pois) {
       const distance = distanceMeters(sample, poi);
-      const visit = this.visits.get(poi.id) || { inside: false, visitId: 0, triggered: false, exitCount: 0, exitSince: null };
+      const visit = this.visits.get(poi.id) || { inside: false, visitId: 0, triggered: false, lastTriggerAt: -Infinity, exitCount: 0, exitSince: null };
       if (!visit.inside && distance <= poi.triggerRadiusMeters) {
         visit.inside = true;
         visit.visitId += 1;
@@ -52,8 +52,12 @@ class GeofenceController {
           }
         } else { visit.exitCount = 0; visit.exitSince = null; }
         if (visit.inside && !visit.triggered) {
+          // Consume this entry even when cooldown suppresses it. Time alone never emits.
           visit.triggered = true;
-          events.push({ poi, poiId: poi.id, visitId: visit.visitId, distanceMeters: distance });
+          if (now - visit.lastTriggerAt >= poi.cooldownSeconds * 1000) {
+            visit.lastTriggerAt = now;
+            events.push({ poi, poiId: poi.id, visitId: visit.visitId, distanceMeters: distance });
+          }
         }
       } else { visit.exitCount = 0; visit.exitSince = null; }
       this.visits.set(poi.id, visit);

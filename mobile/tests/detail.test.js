@@ -14,5 +14,5 @@ test('detail resolves the same adapted records by ID and handles missing IDs', (
 
 test('optional detail fields survive PB03 adaptation', () => {
   const record = { ...testPois[0], description: 'Uji', menu: 'Uji', openingHours: 'Uji', reviews: 'Uji', audioUrl: 'https://example.invalid/audio.mp3' };
-  assert.deepEqual(findPoi(record.id, adaptPois([record])), { ...record, imageUrl: undefined });
+  assert.deepEqual(findPoi(record.id, adaptPois([record])), { ...record, imageUrl: undefined, cooldownSeconds: 60, notificationTitle: '', notificationBody: '' });
 });

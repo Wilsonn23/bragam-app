@@ -14,10 +14,10 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 import { WireframeImageBox, PoiDetailFooter } from '../components/PoiCardComponents';
+import { validCoordinate } from '../location/distance';
 import SearchPoiOverlay from '../components/SearchPoiOverlay';
 import {
   BRAGA_REGION,
-  BRAGA_POIS,
   BRAGA_PURPLE_MAP_STYLE,
 } from '../constants/bragaMapData';
 
@@ -28,15 +28,17 @@ const EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.78;
 export default function ExploreScreen({
   onOpenDetail,
   onOpenDirections,
-  onSimulateGeofence,
+  pois,
+  sample,
+  statusContent,
+  onOpenDevelopmentTools,
 }) {
   const mapRef = useRef(null);
-  const [selectedMarker, setSelectedMarker] = useState(BRAGA_POIS[0]);
   const [activeSegment, setActiveSegment] = useState('nearby'); // 'nearby' | 'recommendation'
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const sheetHeight = useRef(new Animated.Value(COLLAPSED_HEIGHT)).current;
+  const [sheetHeight] = useState(() => new Animated.Value(COLLAPSED_HEIGHT));
   const currentHeightRef = useRef(COLLAPSED_HEIGHT);
 
   const handleRecenterBraga = () => {
@@ -54,7 +56,8 @@ export default function ExploreScreen({
     }).start();
   };
 
-  const panResponder = useRef(
+  // eslint-disable-next-line react-hooks/refs -- PanResponder stores gesture callbacks; ref reads occur only when those callbacks run.
+  const [panResponder] = useState(() =>
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
       onPanResponderMove: (_, gesture) => {
@@ -73,7 +76,7 @@ export default function ExploreScreen({
         }
       },
     })
-  ).current;
+  );
 
   return (
     <View style={styles.root}>
@@ -85,19 +88,20 @@ export default function ExploreScreen({
           style={StyleSheet.absoluteFill}
           initialRegion={BRAGA_REGION}
           customMapStyle={BRAGA_PURPLE_MAP_STYLE}
-          showsUserLocation={true}
+          showsUserLocation={false}
           showsMyLocationButton={false}
           showsCompass={false}
         >
-          {BRAGA_POIS.map((poi) => (
+          {validCoordinate(sample) &&
+            <Marker coordinate={{ latitude: sample.latitude, longitude: sample.longitude }} title="Posisi pengguna" pinColor={COLORS.primaryPurple} />}
+          {pois.map((poi) => (
             <Marker
               key={poi.id}
-              coordinate={poi.coordinate}
+              coordinate={{ latitude: poi.latitude, longitude: poi.longitude }}
               onPress={() => {
-                setSelectedMarker(poi);
                 mapRef.current?.animateToRegion(
                   {
-                    ...poi.coordinate,
+                    latitude: poi.latitude, longitude: poi.longitude,
                     latitudeDelta: 0.004,
                     longitudeDelta: 0.004,
                   },
@@ -131,7 +135,10 @@ export default function ExploreScreen({
 
             <TouchableOpacity
               activeOpacity={0.85}
-              onLongPress={onSimulateGeofence}
+              onLongPress={onOpenDevelopmentTools}
+              accessibilityRole="button"
+              accessibilityLabel="Bookmark"
+              accessibilityHint={__DEV__ ? 'Tekan tahan untuk membuka panel pengujian lokasi' : undefined}
               style={styles.bookmarkCircleBtn}
             >
               <Ionicons name="bookmark" size={20} color={COLORS.darkPurple} />
@@ -237,12 +244,13 @@ export default function ExploreScreen({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.cardsScrollContent}
         >
-          {BRAGA_POIS.map((poi, idx) => (
+          {statusContent}
+          {pois.map((poi, idx) => (
             <View
               key={`${activeSegment}-${poi.id}`}
               style={[
                 styles.poiCardSection,
-                idx !== BRAGA_POIS.length - 1 && styles.poiCardDivider,
+                idx !== pois.length - 1 && styles.poiCardDivider,
               ]}
             >
               <ScrollView
@@ -271,6 +279,7 @@ export default function ExploreScreen({
 
       {/* Search POI Overlay */}
       <SearchPoiOverlay
+        pois={pois}
         visible={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
         onSelectPoi={(poi) => onOpenDetail?.(poi)}

@@ -12,50 +12,12 @@ import {
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { COLORS, RADIUS } from './theme';
 
-const SAMPLE_POIS = [
-  {
-    id: '1',
-    name: 'Braga Citywalk',
-    address: 'Jl. Braga No.99–101, Braga, Kec. Sumur...',
-    distance: '12km',
-    rating: '5.0',
-  },
-  {
-    id: '2',
-    name: 'Sweet Cantina',
-    address: 'Jl. Braga No.99–101, Braga, Kec. Sumur...',
-    distance: '12km',
-    rating: '5.0',
-  },
-  {
-    id: '3',
-    name: 'Kopi Toko Djawa',
-    address: 'Jl. Braga No.99–101, Braga, Kec. Sumur...',
-    distance: '12km',
-    rating: '5.0',
-  },
-  {
-    id: '4',
-    name: 'Toko Roti Canary',
-    address: 'Jl. Braga No.99–101, Braga, Kec. Sumur...',
-    distance: '12km',
-    rating: '5.0',
-  },
-  {
-    id: '5',
-    name: 'Bacang Panas Braga',
-    address: 'Jl. Braga No.99–101, Braga, Kec. Sumur...',
-    distance: '12km',
-    rating: '5.0',
-  },
-];
-
-export default function SearchPoiOverlay({ visible, onClose, onSelectPoi }) {
+export default function SearchPoiOverlay({ visible, onClose, onSelectPoi, pois }) {
   const [query, setQuery] = useState('');
 
   if (!visible) return null;
 
-  const filteredPois = SAMPLE_POIS.filter((item) =>
+  const filteredPois = pois.filter((item) =>
     item.name.toLowerCase().includes(query.toLowerCase())
   );
 
@@ -72,12 +34,12 @@ export default function SearchPoiOverlay({ visible, onClose, onSelectPoi }) {
               autoFocus
               value={query}
               onChangeText={setQuery}
-              placeholder="Type Something..."
+              placeholder="Cari destinasi" accessibilityLabel="Cari destinasi"
               placeholderTextColor={COLORS.textMuted}
               style={styles.inputField}
             />
             {query.length > 0 ? (
-              <TouchableOpacity onPress={() => setQuery('')}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Hapus pencarian" onPress={() => setQuery('')}>
                 <Ionicons
                   name="close-circle"
                   size={20}
@@ -123,6 +85,7 @@ export default function SearchPoiOverlay({ visible, onClose, onSelectPoi }) {
             style={styles.resultList}
             showsVerticalScrollIndicator={false}
           >
+            {filteredPois.length === 0 && <Text style={{ padding: 16 }}>Destinasi tidak ditemukan.</Text>}
             {filteredPois.map((item, idx) => (
               <TouchableOpacity
                 key={item.id}
@@ -170,11 +133,11 @@ export default function SearchPoiOverlay({ visible, onClose, onSelectPoi }) {
 
 const styles = StyleSheet.create({
   overlayRoot: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 50,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(30, 14, 62, 0.45)',
   },
   safeWrapper: {

@@ -30,8 +30,8 @@ export default function NavigationScreen({ poi, onBack }) {
   const mapRef = useRef(null);
   const destinationName = poi?.name || 'Sweet Cantina';
 
-  // Cari koordinat destinasi dari BRAGA_POIS atau gunakan coordinate dari prop poi
-  const targetPoi =
+  // Prefer the API coordinate passed by Explore; legacy trip callers can still resolve the old list.
+  const targetPoi = poi?.coordinate ? poi :
     BRAGA_POIS.find(
       (item) => item.name.toLowerCase() === destinationName.toLowerCase()
     ) ||

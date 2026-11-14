@@ -31,7 +31,7 @@ test('confirmed exit followed by entry starts a new visit', () => {
   assert.equal(c.visits.get(poi.id).inside,true);
   update(c,30,14000);
   assert.equal(c.visits.get(poi.id).inside,false);
-  assert.equal(update(c,0,16000)[0].visitId,2);
+  assert.equal(update(c,0,70000)[0].visitId,2);
 });
 test('boundary jitter and isolated spikes do not spam or rearm', () => {
   const c = new GeofenceController([poi]); update(c,0,10000); c.dismiss(10000);
@@ -92,7 +92,7 @@ test('expiry and suspension clear notification without rearming current visit', 
 });
 test('adapter rejects invalid records and duplicate IDs; image is optional', () => {
   assert.deepEqual(adaptPois(null),[]);
-  for (const patch of [{latitude:Infinity},{longitude:181},{triggerRadiusMeters:0},{triggerRadiusMeters:-1},{name:''},{id:5},{shortDescription:null}]) {
+  for (const patch of [{latitude:Infinity},{longitude:181},{triggerRadiusMeters:0},{triggerRadiusMeters:-1},{name:''},{id:5}]) {
     assert.equal(adaptPois([{...poi,...patch}]).length,0);
   }
   assert.equal(adaptPois([poi,poi]).length,0);

@@ -1,12 +1,16 @@
-# PB05–PB06 UI contract
+# PB05–PB06 integration contract
 
-Source: requested PB05/PB06 acceptance criteria; technical policy and data contract: `mobile/PB05-PB06.md`.
+Business source: the user's PB05–PB06 integration criteria (2026-11-14). Database contract: existing public.pois and the read-only MCP verification recorded in mobile/PB05-PB06.md. No policy or live data changes were authorized or made.
 
-| Capability | Owner | Behavior | Verification |
+| Capability | Canonical owner | Behavior | Verification |
 | --- | --- | --- | --- |
-| Notification modal UI04 | mobile/src/components/PoiTriggerModal.js | One queue head; Android back and close dismiss the same visit; long text scrolls; missing/error image fallback | mobile/tests/geofence.test.js for state; device checklist in mobile/PB05-PB06.md for native UI |
-| Trigger lifecycle and queue | mobile/src/location/geofence.js | Per-POI visit, deterministic ordering and relevance checks | mobile/tests/geofence.test.js |
-| Detail handoff UI05 | App.onOpenPoiDetail(poiId) | Dismiss current notification, show received ID in development; replace callback with Expo Router when UI05 is available | Development simulation; route implementation deferred |
-| Location feedback | useForegroundLocation + App | Permission/services/read failures show recovery action; one foreground watcher | lint/typecheck/export plus device checklist |
+| Shared POI source | src/poi/PoiProvider + store | API load once per root session, loading/error/empty/retry, request cancellation, no static fallback | mobile/tests/integration.test.js |
+| Trigger lifecycle | src/location/geofence | Per-POI visit, hysteresis, cooldown minimum, deterministic queue and relevance pruning | mobile/tests/geofence.test.js + integration.test.js |
+| UI04 | src/components/PoiTriggerModal | One native modal, Figma copy card, scrollable body with persistent primary actions, three gallery slots with fallback, Android back and decline dismiss only current notification | Logic tests; device checklist remains |
+| Detail handoff UI05 | src/poi/notification + src/app/poi/[id].js | “Cek Sekarang” dismisses then pushes same ID to existing route, resolved against shared records | integration.test.js + detail.test.js |
+| Foreground GPS | src/hooks/useForegroundLocation + location/tracking | One subscription, permission/services/error recovery, late completion and unmount guards | mobile/tests/tracking.test.js |
+| Explore presentation | mobile/App.js + src/screens/ExploreScreen + PoiCardComponents | origin/main layout; no persistent healthy-GPS banner; contextual loading/error/empty feedback; development controls behind bookmark long-press; closing tools exits simulation | Source comparison + local checks; native visual check pending |
 
-No persistent location history, server writes, background permissions, audio or push notification are introduced. Data lifecycle: visit state exists in memory only. Permission behavior follows the existing foreground-location flow and the requested scope. No billing, deletion or legal flow applies.
+GPS is active only in foreground Explore on the root route. Leaving Explore or opening detail suspends presentation and exit evidence while preserving visit/cooldown state in the mounted host. Background return requires a fresh acceptable fix. Restarting the process or switching the explicit development dataset resets the in-memory session. No location history is persisted or sent to the API. No background-location permission, push, or audio feature is added; the pre-existing audio provider/config is retained.
+
+UI04 Figma follow-up: Directions delegates the same POI ID to the existing navigation flow. Save/itinerary have optional ID callbacks; absent handlers render visibly disabled controls and availability text. Visual source and intentional dynamic-content/accessibility adaptations are recorded in DESIGN.md.

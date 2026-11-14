@@ -27,3 +27,15 @@ export const RADIUS = {
   sheet: 32,
   pill: 999,
 };
+// Compatibility adapter for Router detail, GPS feedback and shared ActionButton.
+export const theme = { background: COLORS.white, surface: COLORS.lavenderTint,
+  ink: COLORS.textPrimary, muted: COLORS.textSecondary, primary: COLORS.darkPurple,
+  error: '#A52222', overlay: 'rgba(30, 14, 62, 0.55)' };
+
+// UI04-specific tokens from Figma 5MJzy7VlHWVrTYky8yR0sI / 5:1983.
+// Keep Explore's existing palette; this variant matches the notification reference.
+export const POI_NOTIFICATION = {
+  surface: '#F9F7FF', border: '#602ECC', ink: '#3A1678',
+  backdrop: 'rgba(34, 24, 51, 0.5)', tint: '#E7DAFF',
+  radius: 32, borderWidth: 4,
+};
