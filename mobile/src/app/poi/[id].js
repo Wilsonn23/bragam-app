@@ -3,7 +3,7 @@ import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ActionButton } from '../../components/ActionButton';
-import { theme } from '../../components/theme';
+import { COLORS } from '../../components/theme';
 import { useGuideAudio } from '../../audio/AudioProvider';
 import { findPoi } from '../../poi/detail';
 
@@ -46,9 +46,9 @@ function Section({ title, value }) {
   return <View style={styles.section}><Text accessibilityRole="header" style={styles.heading}>{title}</Text><Text style={styles.body}>{value || 'Belum tersedia.'}</Text></View>;
 }
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: theme.background }, content: { padding: 20, gap: 16 },
-  image: { width: '100%', height: 220, borderRadius: 8, backgroundColor: theme.surface },
-  placeholder: { alignItems: 'center', justifyContent: 'center' }, title: { fontSize: 24, fontWeight: 'bold', color: theme.ink },
-  heading: { fontSize: 18, fontWeight: 'bold', color: theme.ink }, body: { fontSize: 16, lineHeight: 24, color: theme.ink },
-  muted: { fontSize: 14, color: theme.muted }, section: { gap: 8, padding: 16, backgroundColor: theme.surface, borderRadius: 8 },
+  page: { flex: 1, backgroundColor: COLORS.softLilacBg }, content: { padding: 20, gap: 16 },
+  image: { width: '100%', height: 220, borderRadius: 8, backgroundColor: COLORS.white },
+  placeholder: { alignItems: 'center', justifyContent: 'center' }, title: { fontSize: 24, fontWeight: 'bold', color: COLORS.textPrimary },
+  heading: { fontSize: 18, fontWeight: 'bold', color: COLORS.textPrimary }, body: { fontSize: 16, lineHeight: 24, color: COLORS.textPrimary },
+  muted: { fontSize: 14, color: COLORS.textSecondary }, section: { gap: 8, padding: 16, backgroundColor: COLORS.white, borderRadius: 8 },
 });

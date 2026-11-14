@@ -1,14 +1,14 @@
 import React from 'react';
 import { Pressable, Text, StyleSheet } from 'react-native';
-import { theme } from './theme';
+import { COLORS } from './theme';
 export function ActionButton({ label, onPress, secondary = false }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
     style={({ pressed }) => [styles.button, secondary && styles.secondary, pressed && { opacity: 0.65 }]}>
-    <Text style={[styles.text, secondary && { color: theme.primary }]}>{label}</Text>
+    <Text style={[styles.text, secondary && { color: COLORS.darkPurple }]}>{label}</Text>
   </Pressable>;
 }
 const styles = StyleSheet.create({
-  button: { minHeight: 48, padding: 14, borderRadius: 8, backgroundColor: theme.primary, justifyContent: 'center', marginVertical: 4 },
-  secondary: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.primary },
-  text: { color: theme.background, textAlign: 'center', fontSize: 16, fontWeight: '600' },
+  button: { minHeight: 48, padding: 14, borderRadius: 8, backgroundColor: COLORS.darkPurple, justifyContent: 'center', marginVertical: 4 },
+  secondary: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.primaryPurple },
+  text: { color: COLORS.white, textAlign: 'center', fontSize: 16, fontWeight: '600' },
 });
