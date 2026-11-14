@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { Fragment, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Animated,
   PanResponder,
-  Dimensions,
+  useWindowDimensions,
   Keyboard,
   Platform,
 } from 'react-native';
@@ -22,9 +22,7 @@ import { WireframeImageBox } from './PoiCardComponents';
 // Sesuaikan IP/Port dengan server backend Anda
 const API_BASE_URL = 'http://10.46.161.81:5000';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 275;
-const EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.78;
 
 const TIME_OPTIONS = [
   { label: 'All Time', value: 'Semua' },
@@ -54,6 +52,8 @@ export default function SearchPoiOverlay({
   onClose,
   onSelectPoi,
 }) {
+  const { height: screenHeight } = useWindowDimensions();
+  const expandedHeight = screenHeight * 0.78;
   const [categoryOptions, setCategoryOptions] = useState([
     { label: 'Category', value: 'Semua' },
   ]);
@@ -77,7 +77,17 @@ export default function SearchPoiOverlay({
   const [isExpanded, setIsExpanded] = useState(true);
   const isExpandedRef = useRef(true);
   const sheetHeight = useRef(new Animated.Value(0)).current;
-  const currentHeightRef = useRef(EXPANDED_HEIGHT);
+  const currentHeightRef = useRef(expandedHeight);
+  const dragStartHeightRef = useRef(expandedHeight);
+  const expandedHeightRef = useRef(expandedHeight);
+
+  useEffect(() => {
+    expandedHeightRef.current = expandedHeight;
+    if (visible && isExpanded) {
+      currentHeightRef.current = expandedHeight;
+      sheetHeight.setValue(expandedHeight);
+    }
+  }, [expandedHeight, isExpanded, visible, sheetHeight]);
 
   // Pantau tinggi keyboard hanya untuk padding bawah FlatList (posisi overlay tetap terkunci)
   useEffect(() => {
@@ -98,7 +108,7 @@ export default function SearchPoiOverlay({
   }, []);
 
   const animateSheet = (toExpanded) => {
-    const target = toExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
+    const target = toExpanded ? expandedHeightRef.current : COLLAPSED_HEIGHT;
     setIsExpanded(toExpanded);
     isExpandedRef.current = toExpanded;
     currentHeightRef.current = target;
@@ -111,6 +121,9 @@ export default function SearchPoiOverlay({
 
   const handleClose = () => {
     Keyboard.dismiss();
+    sheetHeight.stopAnimation();
+    isExpandedRef.current = false;
+    currentHeightRef.current = 0;
     Animated.timing(sheetHeight, {
       toValue: 0,
       duration: 180,
@@ -125,10 +138,10 @@ export default function SearchPoiOverlay({
     if (visible) {
       setIsExpanded(true);
       isExpandedRef.current = true;
-      currentHeightRef.current = EXPANDED_HEIGHT;
+      currentHeightRef.current = expandedHeightRef.current;
       sheetHeight.setValue(COLLAPSED_HEIGHT);
       Animated.spring(sheetHeight, {
-        toValue: EXPANDED_HEIGHT,
+        toValue: expandedHeightRef.current,
         useNativeDriver: false,
         bounciness: 4,
       }).start();
@@ -146,25 +159,29 @@ export default function SearchPoiOverlay({
       onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
       onPanResponderGrant: () => {
         Keyboard.dismiss();
+        dragStartHeightRef.current = currentHeightRef.current;
       },
       onPanResponderMove: (_, gesture) => {
-        const nextHeight = currentHeightRef.current - gesture.dy;
-        if (nextHeight >= COLLAPSED_HEIGHT - 70 && nextHeight <= EXPANDED_HEIGHT + 20) {
-          sheetHeight.setValue(nextHeight);
-        }
+        const nextHeight = Math.min(
+          expandedHeightRef.current,
+          Math.max(0, dragStartHeightRef.current - gesture.dy)
+        );
+        currentHeightRef.current = nextHeight;
+        sheetHeight.setValue(nextHeight);
       },
       onPanResponderRelease: (_, gesture) => {
-        if (!isExpandedRef.current && gesture.dy > 55) {
+        if (gesture.dy > 40) {
           handleClose();
           return;
         }
 
         if (gesture.dy < -40) {
           animateSheet(true);
-        } else if (gesture.dy > 40) {
-          animateSheet(false);
         } else {
-          animateSheet(currentHeightRef.current > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
+          animateSheet(
+            currentHeightRef.current >
+              (COLLAPSED_HEIGHT + expandedHeightRef.current) / 2
+          );
         }
       },
     })
@@ -371,12 +388,19 @@ export default function SearchPoiOverlay({
   const activeDropdown = getDropdownConfig();
 
   return (
-    <Animated.View
-      style={[
-        styles.bottomSheet,
-        { height: sheetHeight, bottom: -windowShrink },
-      ]}
-    >
+    <Fragment>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={handleClose}
+        style={styles.dismissBackdrop}
+      />
+
+      <Animated.View
+        style={[
+          styles.bottomSheet,
+          { height: sheetHeight, bottom: -windowShrink },
+        ]}
+      >
       {/* Area Drag Handle & Header Slider */}
       <View {...panResponder.panHandlers} style={styles.dragHeaderArea}>
         <TouchableOpacity
@@ -557,12 +581,22 @@ export default function SearchPoiOverlay({
             )}
           </View>
         </TouchableOpacity>
-      </Modal>
-    </Animated.View>
+        </Modal>
+      </Animated.View>
+    </Fragment>
   );
 }
 
 const styles = StyleSheet.create({
+  dismissBackdrop: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: 'transparent',
+    zIndex: 29,
+  },
   bottomSheet: {
     position: 'absolute',
     left: 0,

@@ -8,7 +8,7 @@ import {
   SafeAreaView,
   Animated,
   PanResponder,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -18,9 +18,7 @@ import SearchPoiOverlay from '../components/SearchPoiOverlay';
 
 const API_BASE_URL = 'http://10.46.161.81:5000';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 275;
-const EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.78;
 
 const FALLBACK_ITEMS = [
   { id: 'p1', name: 'Braga Citywalk', distance: '12km', rating: '5.0' },
@@ -56,6 +54,8 @@ export default function ExploreScreen({
   onOpenDirections,
   onSimulateGeofence,
 }) {
+  const { height: screenHeight } = useWindowDimensions();
+  const expandedHeight = screenHeight * 0.78;
   const [activeSegment, setActiveSegment] = useState('nearby'); // 'nearby' | 'recommendation'
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -114,9 +114,19 @@ export default function ExploreScreen({
 
   const sheetHeight = useRef(new Animated.Value(COLLAPSED_HEIGHT)).current;
   const currentHeightRef = useRef(COLLAPSED_HEIGHT);
+  const dragStartHeightRef = useRef(COLLAPSED_HEIGHT);
+  const expandedHeightRef = useRef(expandedHeight);
+
+  useEffect(() => {
+    expandedHeightRef.current = expandedHeight;
+    if (isExpanded) {
+      currentHeightRef.current = expandedHeight;
+      sheetHeight.setValue(expandedHeight);
+    }
+  }, [expandedHeight, isExpanded, currentHeightRef, sheetHeight]);
 
   const animateSheet = (toExpanded) => {
-    const target = toExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
+    const target = toExpanded ? expandedHeightRef.current : COLLAPSED_HEIGHT;
     setIsExpanded(toExpanded);
     currentHeightRef.current = target;
     Animated.spring(sheetHeight, {
@@ -129,11 +139,16 @@ export default function ExploreScreen({
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
+      onPanResponderGrant: () => {
+        dragStartHeightRef.current = currentHeightRef.current;
+      },
       onPanResponderMove: (_, gesture) => {
-        const nextHeight = currentHeightRef.current - gesture.dy;
-        if (nextHeight >= COLLAPSED_HEIGHT - 20 && nextHeight <= EXPANDED_HEIGHT + 20) {
-          sheetHeight.setValue(nextHeight);
-        }
+        const nextHeight = Math.min(
+          expandedHeightRef.current,
+          Math.max(COLLAPSED_HEIGHT, dragStartHeightRef.current - gesture.dy)
+        );
+        currentHeightRef.current = nextHeight;
+        sheetHeight.setValue(nextHeight);
       },
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dy < -40) {
@@ -141,7 +156,10 @@ export default function ExploreScreen({
         } else if (gesture.dy > 40) {
           animateSheet(false);
         } else {
-          animateSheet(currentHeightRef.current > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
+          animateSheet(
+            currentHeightRef.current >
+              (COLLAPSED_HEIGHT + expandedHeightRef.current) / 2
+          );
         }
       },
     })
@@ -387,6 +405,8 @@ export default function ExploreScreen({
           )}
         </View>
 
+        <View style={styles.scrollBoundaryLine} />
+
         {/* Scrollable POI Cards List */}
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -591,6 +611,12 @@ const styles = StyleSheet.create({
   },
   dragHeaderArea: {
     paddingBottom: 6,
+  },
+  scrollBoundaryLine: {
+    height: 2,
+    marginBottom: 8,
+    borderRadius: 1,
+    backgroundColor: COLORS.primaryPurple,
   },
   dragHandleTouch: {
     paddingVertical: 6,

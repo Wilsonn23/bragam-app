@@ -120,7 +120,12 @@ export default function NavigationScreen({ poi, onBack }) {
         </Svg>
 
         {/* Destination Marker */}
-        <View style={[styles.markerGroup, { top: 135, left: 178 }]}>
+        <View
+          style={[
+            styles.markerGroup,
+            { top: '27%', left: '45%' },
+          ]}
+        >
           <View style={styles.teardropPin}>
             <View style={styles.pinHole} />
           </View>
@@ -128,13 +133,18 @@ export default function NavigationScreen({ poi, onBack }) {
         </View>
 
         {/* Walking Duration Speech Bubble */}
-        <View style={[styles.walkBubble, { top: 205, left: 108 }]}>
+        <View style={[styles.walkBubble, { top: '38%', left: '28%' }]}>
           <MaterialIcons name="directions-walk" size={16} color={COLORS.white} />
           <Text style={styles.walkBubbleText}>1 min</Text>
         </View>
 
         {/* User Location Puck */}
-        <View style={[styles.userPuck, { top: 325, left: 172 }]} />
+        <View
+          style={[
+            styles.userPuck,
+            { top: '65%', left: '44%' },
+          ]}
+        />
 
         {/* Recenter Button */}
         <TouchableOpacity activeOpacity={0.85} style={styles.recenterBtn}>
