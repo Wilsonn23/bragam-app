@@ -10,33 +10,38 @@ import {
   PanResponder,
   Dimensions,
 } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 import { WireframeImageBox, PoiDetailFooter } from '../components/PoiCardComponents';
 import SearchPoiOverlay from '../components/SearchPoiOverlay';
+import {
+  BRAGA_REGION,
+  BRAGA_POIS,
+  BRAGA_PURPLE_MAP_STYLE,
+} from '../constants/bragaMapData';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 275;
 const EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.78;
-
-const PLACEHOLDER_ITEMS = [
-  { id: 'p1', name: 'Braga Citywalk', distance: '12km', rating: '5.0' },
-  { id: 'p2', name: 'Braga Citywalk', distance: '12km', rating: '5.0' },
-  { id: 'p3', name: 'Braga Citywalk', distance: '12km', rating: '5.0' },
-];
 
 export default function ExploreScreen({
   onOpenDetail,
   onOpenDirections,
   onSimulateGeofence,
 }) {
+  const mapRef = useRef(null);
+  const [selectedMarker, setSelectedMarker] = useState(BRAGA_POIS[0]);
   const [activeSegment, setActiveSegment] = useState('nearby'); // 'nearby' | 'recommendation'
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
   const sheetHeight = useRef(new Animated.Value(COLLAPSED_HEIGHT)).current;
   const currentHeightRef = useRef(COLLAPSED_HEIGHT);
+
+  const handleRecenterBraga = () => {
+    mapRef.current?.animateToRegion(BRAGA_REGION, 600);
+  };
 
   const animateSheet = (toExpanded) => {
     const target = toExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
@@ -72,34 +77,45 @@ export default function ExploreScreen({
 
   return (
     <View style={styles.root}>
-      {/* Map Canvas */}
+      {/* Google Maps Canvas */}
       <View style={styles.mapCanvas}>
-        <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
-          <Path
-            d="M -20 120 Q 140 160 220 40 T 420 140"
-            stroke={COLORS.white}
-            strokeWidth="12"
-            fill="none"
-          />
-          <Path
-            d="M 80 -10 L 160 280 L 110 520"
-            stroke={COLORS.white}
-            strokeWidth="10"
-            fill="none"
-          />
-          <Path
-            d="M 280 -10 Q 250 220 330 480"
-            stroke={COLORS.white}
-            strokeWidth="14"
-            fill="none"
-          />
-          <Path
-            d="M -10 310 Q 190 290 410 350"
-            stroke={COLORS.white}
-            strokeWidth="8"
-            fill="none"
-          />
-        </Svg>
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_GOOGLE}
+          style={StyleSheet.absoluteFill}
+          initialRegion={BRAGA_REGION}
+          customMapStyle={BRAGA_PURPLE_MAP_STYLE}
+          showsUserLocation={true}
+          showsMyLocationButton={false}
+          showsCompass={false}
+        >
+          {BRAGA_POIS.map((poi) => (
+            <Marker
+              key={poi.id}
+              coordinate={poi.coordinate}
+              onPress={() => {
+                setSelectedMarker(poi);
+                mapRef.current?.animateToRegion(
+                  {
+                    ...poi.coordinate,
+                    latitudeDelta: 0.004,
+                    longitudeDelta: 0.004,
+                  },
+                  400
+                );
+              }}
+            >
+              <View style={styles.customMarkerRow}>
+                <View style={styles.teardropPin}>
+                  <View style={styles.pinInnerHole} />
+                </View>
+                <View style={styles.markerLabelBadge}>
+                  <Text style={styles.mapLabelText}>{poi.name}</Text>
+                </View>
+              </View>
+            </Marker>
+          ))}
+        </MapView>
 
         {/* Top Search Bar Trigger */}
         <SafeAreaView style={styles.topOverlay}>
@@ -122,33 +138,16 @@ export default function ExploreScreen({
             </TouchableOpacity>
           </View>
         </SafeAreaView>
-
-        {/* Map Marker 1 */}
-        <View style={[styles.mapMarkerGroup, { top: '23%', left: '28%' }]}>
-          <View style={styles.teardropPin}>
-            <View style={styles.pinInnerHole} />
-          </View>
-          <Text style={styles.mapLabelText}>Braga Citywalk</Text>
-        </View>
-
-        {/* User Location Puck */}
-        <View style={[styles.userPuckWrapper, { top: '46%', left: '49%' }]}>
-          <View style={styles.userPuckDot} />
-        </View>
-
-        {/* Map Marker 2 */}
-        <View style={[styles.mapMarkerGroup, { top: '53%', left: '48%' }]}>
-          <View style={styles.teardropPin}>
-            <View style={styles.pinInnerHole} />
-          </View>
-          <Text style={styles.mapLabelText}>Sweet Cantina</Text>
-        </View>
       </View>
 
       {/* Draggable Bottom Sheet (Nearby You & Contextual Recommendation) */}
       <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
         {/* Floating Recenter Button above sheet */}
-        <TouchableOpacity activeOpacity={0.85} style={styles.recenterBtn}>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={handleRecenterBraga}
+          style={styles.recenterBtn}
+        >
           <MaterialIcons name="my-location" size={24} color={COLORS.darkPurple} />
         </TouchableOpacity>
 
@@ -233,17 +232,17 @@ export default function ExploreScreen({
           )}
         </View>
 
-        {/* Scrollable POI Cards List (Placeholder untuk Nearby You & Recommendation) */}
+        {/* Scrollable POI Cards List */}
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.cardsScrollContent}
         >
-          {PLACEHOLDER_ITEMS.map((poi, idx) => (
+          {BRAGA_POIS.map((poi, idx) => (
             <View
               key={`${activeSegment}-${poi.id}`}
               style={[
                 styles.poiCardSection,
-                idx !== PLACEHOLDER_ITEMS.length - 1 && styles.poiCardDivider,
+                idx !== BRAGA_POIS.length - 1 && styles.poiCardDivider,
               ]}
             >
               <ScrollView
@@ -327,48 +326,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  mapMarkerGroup: {
-    position: 'absolute',
+  customMarkerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   teardropPin: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#8B65D4',
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 3,
   },
   pinInnerHole: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: COLORS.lavenderTint,
+  },
+  markerLabelBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
   mapLabelText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.primaryPurple,
-  },
-  userPuckWrapper: {
-    position: 'absolute',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(91, 43, 191, 0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  userPuckDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: COLORS.lavenderTint,
-    borderWidth: 2.5,
-    borderColor: COLORS.primaryPurple,
   },
   recenterBtn: {
     position: 'absolute',
