@@ -22,7 +22,7 @@ export default function App() {
   // State khusus Geofence Trigger Notification (hanya muncul jika geofence terpicu)
   const [geofencePoi, setGeofencePoi] = useState(null);
 
-  // Hitung penyusutan tinggi window saat keyboard muncul agar navbar & overlay tetap stay di bawah
+  // Hitung penyusutan tinggi window saat keyboard muncul agar navbar & sheet tetap di bawah
   const [fullHeight, setFullHeight] = useState(0);
   const [currentHeight, setCurrentHeight] = useState(0);
   const [navHeight, setNavHeight] = useState(0);
