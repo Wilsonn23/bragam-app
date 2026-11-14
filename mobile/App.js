@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, StatusBar } from 'react-native';
 import BottomNavBar from './src/components/BottomNavBar';
 import PoiTriggerModal from './src/components/PoiTriggerModal';
@@ -11,74 +11,32 @@ import NavigationScreen from './src/screens/NavigationScreen';
 import TripRouteSummaryScreen from './src/screens/TripRouteSummaryScreen';
 import { COLORS } from './src/components/theme';
 
-// Modul API & Geofence dari rekan tim
-import { fetchPois } from './src/poi/api';
-import { useForegroundLocation } from './src/hooks/useForegroundLocation';
-import { usePoiTriggers } from './src/hooks/usePoiTriggers';
-import { BRAGA_POIS } from './src/constants/bragaMapData';
-
 export default function App() {
   const [activeTab, setActiveTab] = useState('Home');
+
+  // Sub-screens state: null | 'PoiDetail' | 'Navigation' | 'TripSummary'
   const [subScreen, setSubScreen] = useState(null);
   const [selectedPoi, setSelectedPoi] = useState(null);
   const [selectedTrip, setSelectedTrip] = useState(null);
 
-  // State POI dari backend (pakai BRAGA_POIS sebagai cadangan awal)
-  const [pois, setPois] = useState(BRAGA_POIS);
-  const [manualGeofencePoi, setManualGeofencePoi] = useState(null);
+  // State khusus Geofence Trigger Notification (hanya muncul jika geofence terpicu)
+  const [geofencePoi, setGeofencePoi] = useState(null);
 
-  // 1. Ambil dataset POI asli dari GET /api/pois saat aplikasi dibuka
-  useEffect(() => {
-    let isMounted = true;
-    fetchPois()
-      .then((data) => {
-        if (isMounted && Array.isArray(data) && data.length > 0) {
-          // Pastikan properti `coordinate` tersedia untuk react-native-maps
-          const normalized = data.map((item) => ({
-            ...item,
-            coordinate: item.coordinate || {
-              latitude: Number(item.latitude),
-              longitude: Number(item.longitude),
-            },
-          }));
-          setPois(normalized);
-        }
-      })
-      .catch((err) => {
-        console.warn('API belum terhubung, menggunakan data lokal:', err.message);
-      });
+  // Hitung penyusutan tinggi window saat keyboard muncul agar navbar & sheet tetap di bawah
+  const [fullHeight, setFullHeight] = useState(0);
+  const [currentHeight, setCurrentHeight] = useState(0);
+  const [navHeight, setNavHeight] = useState(0);
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // 2. Baca lokasi GPS perangkat & stabilkan referensi objeknya dengan useMemo
-  const locationState = useForegroundLocation();
-  const rawCoords =
-    locationState?.sample ||
-    locationState?.location?.coords ||
-    locationState?.coords ||
-    locationState?.location ||
-    locationState;
-
-  const lat = rawCoords?.latitude;
-  const lng = rawCoords?.longitude;
-
-  const currentSample = useMemo(() => {
-    if (typeof lat !== 'number' || typeof lng !== 'number') return null;
-    return { latitude: lat, longitude: lng };
-  }, [lat, lng]);
-
-  const { event, dismiss } = usePoiTriggers(pois, currentSample, Boolean(currentSample));
-
-  // Gabungkan trigger GPS asli dengan simulasi tekan-lama tombol bookmark
-  const activeTriggerPoi = event?.poi || manualGeofencePoi;
-
-  const handleCloseModal = () => {
-    if (event) dismiss();
-    setManualGeofencePoi(null);
+  const handleContainerLayout = (event) => {
+    const { height } = event.nativeEvent.layout;
+    if (height > 0) {
+      setCurrentHeight(height);
+      setFullHeight((prev) => (height > prev ? height : prev));
+    }
   };
+
+  const windowShrink =
+    fullHeight > 0 && currentHeight > 0 ? Math.max(0, fullHeight - currentHeight) : 0;
 
   const handleOpenDetail = (poi) => {
     setSelectedPoi(poi);
@@ -135,7 +93,6 @@ export default function App() {
       case 'Home':
         return (
           <HomeScreen
-            pois={pois}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
             onUseTrip={handleUseTrip}
@@ -144,10 +101,17 @@ export default function App() {
       case 'Explore':
         return (
           <ExploreScreen
-            pois={pois}
+            windowShrink={windowShrink}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
-            onSimulateGeofence={() => setManualGeofencePoi(pois[0])}
+            // Tekan tahan ikon bookmark di kanan atas Explore untuk menguji pop-up geofence
+            onSimulateGeofence={() =>
+              setGeofencePoi({
+                name: 'Braga Citywalk',
+                distance: '12km',
+                rating: '5.0',
+              })
+            }
           />
         );
       case 'Trip':
@@ -155,38 +119,55 @@ export default function App() {
       case 'Account':
         return <AccountScreen />;
       default:
-        return <HomeScreen pois={pois} />;
+        return <HomeScreen />;
     }
   };
 
+  // POI Detail tampil penuh tanpa BottomNavBar sesuai desain
   const showBottomNav = subScreen !== 'PoiDetail';
+
   const isLightStatusBar =
     subScreen === null && (activeTab === 'Home' || activeTab === 'Account');
 
   return (
-    <View style={styles.container}>
+    <View onLayout={handleContainerLayout} style={styles.container}>
       <StatusBar
         barStyle={isLightStatusBar ? 'light-content' : 'dark-content'}
         backgroundColor={isLightStatusBar ? COLORS.primaryPurple : COLORS.softLilacBg}
       />
 
-      <View style={styles.screenWrapper}>{renderContent()}</View>
+      <View
+        style={[
+          styles.screenWrapper,
+          showBottomNav && navHeight > 0 ? { paddingBottom: navHeight } : null,
+        ]}
+      >
+        {renderContent()}
+      </View>
 
       {showBottomNav && (
-        <BottomNavBar activeTab={activeTab} onSelectTab={handleSelectTab} />
+        <View
+          onLayout={(event) => {
+            const h = event.nativeEvent.layout.height;
+            if (h > 0 && h !== navHeight) setNavHeight(h);
+          }}
+          style={[styles.fixedBottomNav, { bottom: -windowShrink }]}
+        >
+          <BottomNavBar activeTab={activeTab} onSelectTab={handleSelectTab} />
+        </View>
       )}
 
-      {/* Geofence Notification Pop-up (Otomatis dari GPS atau Simulasi) */}
+      {/* Geofence Notification Pop-up */}
       <PoiTriggerModal
-        visible={Boolean(activeTriggerPoi)}
-        poi={activeTriggerPoi}
-        onClose={handleCloseModal}
+        visible={Boolean(geofencePoi)}
+        poi={geofencePoi}
+        onClose={() => setGeofencePoi(null)}
         onCheckNow={(poi) => {
-          handleCloseModal();
+          setGeofencePoi(null);
           handleOpenDetail(poi);
         }}
         onDirections={(poi) => {
-          handleCloseModal();
+          setGeofencePoi(null);
           handleOpenDirections(poi);
         }}
       />
@@ -201,5 +182,11 @@ const styles = StyleSheet.create({
   },
   screenWrapper: {
     flex: 1,
+  },
+  fixedBottomNav: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
 });
