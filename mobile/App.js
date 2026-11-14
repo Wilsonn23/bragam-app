@@ -15,15 +15,12 @@ import { ActionButton } from './src/components/ActionButton';
 import NavigationScreen from './src/screens/NavigationScreen';
 import TripRouteSummaryScreen from './src/screens/TripRouteSummaryScreen';
 import { COLORS } from './src/components/theme';
-const SimulationPanel = __DEV__ ? require('./src/dev/SimulationPanel').SimulationPanel : null;
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('Home');
   const data = usePois();
   const active = useAppActive();
   const path = usePathname();
-  const [simSample, setSimSample] = useState(null);
-  const [developmentToolsOpen, setDevelopmentToolsOpen] = useState(false);
 
   // Existing non-Router sub-screens: Navigation and TripSummary.
   const [subScreen, setSubScreen] = useState(null);
@@ -31,8 +28,8 @@ export default function App() {
   const [selectedTrip, setSelectedTrip] = useState(null);
 
   const exploring = active && path === '/' && activeTab === 'Explore' && subScreen === null;
-  const gps = useForegroundLocation(exploring && !data.simulation);
-  const sample = data.simulation ? simSample : gps.sample;
+  const gps = useForegroundLocation(exploring);
+  const sample = gps.sample;
   const { event, dismiss } = usePoiTriggers(data.records, sample, exploring);
   const handleOpenDetail = poi => {
     if (poi?.id) openPoiDetail(poi.id, target => router.push(target));
@@ -41,24 +38,15 @@ export default function App() {
     dismiss();
     openPoiDetail(poiId, target => router.push(target));
   };
-  const showDevelopmentTools = __DEV__ && developmentToolsOpen;
   const hasLocationFeedback = data.status === 'loading' || data.status === 'empty' || data.error ||
-    (!data.simulation && (gps.loading || gps.error));
-  const locationFeedback = (hasLocationFeedback || showDevelopmentTools || data.simulation) ? <View style={{ gap: 8, padding: 16 }}>
-    {data.simulation && <Text style={{ color: COLORS.textPrimary }}>SIMULASI — bukan GPS asli</Text>}
+    gps.loading || gps.error;
+  const locationFeedback = hasLocationFeedback ? <View style={{ gap: 8, padding: 16 }}>
     {data.status === 'loading' && <ActivityIndicator accessibilityLabel="Memuat destinasi" color={COLORS.darkPurple} />}
     {data.error && <Text accessibilityLiveRegion="polite">{data.error}</Text>}
     {data.error && <ActionButton label="Coba muat destinasi lagi" onPress={data.retry} />}
     {data.status === 'empty' && <><Text>Belum ada destinasi tersedia.</Text><ActionButton label="Muat ulang destinasi" onPress={data.retry} /></>}
-    {!data.simulation && gps.loading && <Text>Membaca lokasi…</Text>}
-    {!data.simulation && gps.error && <><Text accessibilityLiveRegion="polite">{gps.error}</Text><ActionButton label="Coba GPS lagi" onPress={gps.retry} /></>}
-    {showDevelopmentTools && <ActionButton secondary label={data.simulation ? 'Gunakan GPS asli' : 'Aktifkan simulasi development'} onPress={() => {
-      setSimSample(null); data.setSimulation(!data.simulation);
-    }} />}
-    {showDevelopmentTools && data.simulation && SimulationPanel && <SimulationPanel onSample={setSimSample} />}
-    {showDevelopmentTools && <ActionButton secondary label="Tutup panel development" onPress={() => {
-      setSimSample(null); data.setSimulation(false); setDevelopmentToolsOpen(false);
-    }} />}
+    {gps.loading && <Text>Membaca lokasi…</Text>}
+    {gps.error && <><Text accessibilityLiveRegion="polite">{gps.error}</Text><ActionButton label="Coba GPS lagi" onPress={gps.retry} /></>}
   </View> : null;
 
   const handleOpenDirections = (poi) => {
@@ -115,7 +103,6 @@ export default function App() {
             pois={data.records}
             sample={sample}
             statusContent={locationFeedback}
-            onOpenDevelopmentTools={__DEV__ ? () => setDevelopmentToolsOpen(true) : undefined}
           />
         );
       case 'Trip':

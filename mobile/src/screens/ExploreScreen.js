@@ -31,7 +31,6 @@ export default function ExploreScreen({
   pois,
   sample,
   statusContent,
-  onOpenDevelopmentTools,
 }) {
   const mapRef = useRef(null);
   const [activeSegment, setActiveSegment] = useState('nearby'); // 'nearby' | 'recommendation'
@@ -135,10 +134,8 @@ export default function ExploreScreen({
 
             <TouchableOpacity
               activeOpacity={0.85}
-              onLongPress={onOpenDevelopmentTools}
               accessibilityRole="button"
               accessibilityLabel="Bookmark"
-              accessibilityHint={__DEV__ ? 'Tekan tahan untuk membuka panel pengujian lokasi' : undefined}
               style={styles.bookmarkCircleBtn}
             >
               <Ionicons name="bookmark" size={20} color={COLORS.darkPurple} />

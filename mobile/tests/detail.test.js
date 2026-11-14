@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { findPoi, detailContent } = require('../src/poi/detail');
 const { adaptPois } = require('../src/poi/adapter');
-const { testPois } = require('../src/dev/fixtures');
+const { testPois } = require('./fixtures/pois');
 
 test('detail resolves the same adapted records by ID and handles missing IDs', () => {
   const records = adaptPois(testPois);

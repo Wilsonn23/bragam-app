@@ -9,7 +9,7 @@ import { COLORS } from './theme';
 
 export const goBackToApp = () => router.canGoBack() ? router.back() : router.replace('/');
 
-// Detail and directions resolve the exact same POI ID and API/simulation session.
+// Detail and directions resolve the exact same POI ID from the API session.
 export function PoiRoute({ children }) {
   const { id } = useLocalSearchParams();
   const data = usePois();

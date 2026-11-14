@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { distanceMeters } = require('../src/location/distance');
 const { adaptPois } = require('../src/poi/adapter');
 const { GeofenceController } = require('../src/location/geofence');
-const { testPois } = require('../src/dev/fixtures');
+const { testPois } = require('./fixtures/pois');
 const poi = testPois[0];
 const fix = (meters, timestamp = 10000, accuracy = 3) => ({ latitude: meters / 111194.9266, longitude: 0, timestamp, accuracy });
 const update = (c, meters, time) => c.update(fix(meters, time), time);
