@@ -1,13 +1,13 @@
 export const COLORS = {
   // Primary & Dark Purples
-  darkPurple: '#35166F',      // Header top, dark buttons, bottom nav bar
-  activeNavPill: '#4B229E',   // Pill background tab aktif di bottom nav
-  primaryPurple: '#5B2BBF',   // Header bottom, border utama, ikon aktif
-  mediumPurple: '#7E57C2',    // Aksen pin map & border sekunder
+  darkPurple: '#35166F',
+  activeNavPill: '#4B229E',
+  primaryPurple: '#5B2BBF',
+  mediumPurple: '#7E57C2',
 
   // Tints & Backgrounds
-  lavenderTint: '#EAE2F8',    // Latar ikon bulat & placeholder gambar
-  softLilacBg: '#F9F7FD',     // Latar belakang halaman Trip & Account
+  lavenderTint: '#EAE2F8',
+  softLilacBg: '#F9F7FD',
   white: '#FFFFFF',
 
   // Typography
@@ -27,3 +27,17 @@ export const RADIUS = {
   sheet: 32,
   pill: 999,
 };
+
+// Kompatibilitas untuk komponen dari branch main (ActionButton.js, dll.)
+export const theme = {
+  primary: COLORS.primaryPurple,
+  primaryDark: COLORS.darkPurple,
+  secondary: COLORS.mediumPurple,
+  surface: COLORS.white,
+  background: COLORS.softLilacBg,
+  text: COLORS.textPrimary,
+  textSecondary: COLORS.textSecondary,
+  border: COLORS.borderSubtle,
+};
+
+export default theme;

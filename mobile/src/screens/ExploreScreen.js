@@ -10,7 +10,12 @@ import {
   PanResponder,
   Dimensions,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, {
+  Marker,
+  Polygon,
+  Polyline,
+  PROVIDER_GOOGLE,
+} from 'react-native-maps';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 import { WireframeImageBox, PoiDetailFooter } from '../components/PoiCardComponents';
@@ -18,7 +23,8 @@ import SearchPoiOverlay from '../components/SearchPoiOverlay';
 import {
   BRAGA_REGION,
   BRAGA_POIS,
-  BRAGA_PURPLE_MAP_STYLE,
+  BRAGA_ZONE_POLYGON,
+  BRAGA_GRAY_MAP_STYLE,
 } from '../constants/bragaMapData';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -26,6 +32,7 @@ const COLLAPSED_HEIGHT = 275;
 const EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.78;
 
 export default function ExploreScreen({
+  pois = BRAGA_POIS,
   onOpenDetail,
   onOpenDirections,
   onSimulateGeofence,
@@ -84,20 +91,40 @@ export default function ExploreScreen({
           provider={PROVIDER_GOOGLE}
           style={StyleSheet.absoluteFill}
           initialRegion={BRAGA_REGION}
-          customMapStyle={BRAGA_PURPLE_MAP_STYLE}
+          customMapStyle={BRAGA_GRAY_MAP_STYLE}
           showsUserLocation={true}
           showsMyLocationButton={false}
           showsCompass={false}
         >
-          {BRAGA_POIS.map((poi) => (
+          {/* Highlight Blok Ungu Transparan Khusus Koridor Jl. Braga */}
+          <Polygon
+            coordinates={BRAGA_ZONE_POLYGON}
+            fillColor="rgba(126, 87, 194, 0.24)"
+            strokeWidth={0}
+          />
+
+          {/* Garis Batas Putus-Putus Mengelilingi Zona Jl. Braga */}
+          <Polyline
+            coordinates={[...BRAGA_ZONE_POLYGON, BRAGA_ZONE_POLYGON[0]]}
+            strokeColor={COLORS.primaryPurple}
+            strokeWidth={3}
+            lineDashPattern={[10, 8]}
+          />
+
+          {/* Marker POI di Jl. Braga */}
+          {pois.map((poi) => (
             <Marker
               key={poi.id}
-              coordinate={poi.coordinate}
+              coordinate={{
+              latitude: Number(poi.latitude),
+              longitude: Number(poi.longitude),
+              }}
               onPress={() => {
                 setSelectedMarker(poi);
                 mapRef.current?.animateToRegion(
                   {
-                    ...poi.coordinate,
+                    latitude: Number(poi.latitude),
+                    longitude: Number(poi.longitude),
                     latitudeDelta: 0.004,
                     longitudeDelta: 0.004,
                   },
@@ -237,12 +264,12 @@ export default function ExploreScreen({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.cardsScrollContent}
         >
-          {BRAGA_POIS.map((poi, idx) => (
+          {pois.map((poi, idx) => (
             <View
               key={`${activeSegment}-${poi.id}`}
               style={[
                 styles.poiCardSection,
-                idx !== BRAGA_POIS.length - 1 && styles.poiCardDivider,
+                idx !== pois.length - 1 && styles.poiCardDivider,
               ]}
             >
               <ScrollView
@@ -258,7 +285,7 @@ export default function ExploreScreen({
               <View style={{ paddingHorizontal: 20 }}>
                 <PoiDetailFooter
                   name={poi.name}
-                  distance={poi.distance}
+                  distance={poi.distance || `${poi.triggerRadiusMeters || 10}m`}
                   rating={poi.rating}
                   onCheckDetail={() => onOpenDetail?.(poi)}
                   onDirections={() => onOpenDirections?.(poi)}
@@ -282,11 +309,11 @@ export default function ExploreScreen({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#E5DAF7',
+    backgroundColor: '#EAEAEA',
   },
   mapCanvas: {
     flex: 1,
-    backgroundColor: '#DDD0F4',
+    backgroundColor: '#EAEAEA',
     position: 'relative',
   },
   topOverlay: {

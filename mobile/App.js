@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet, StatusBar } from 'react-native';
 import BottomNavBar from './src/components/BottomNavBar';
 import PoiTriggerModal from './src/components/PoiTriggerModal';
@@ -11,16 +11,74 @@ import NavigationScreen from './src/screens/NavigationScreen';
 import TripRouteSummaryScreen from './src/screens/TripRouteSummaryScreen';
 import { COLORS } from './src/components/theme';
 
+// Modul API & Geofence dari rekan tim
+import { fetchPois } from './src/poi/api';
+import { useForegroundLocation } from './src/hooks/useForegroundLocation';
+import { usePoiTriggers } from './src/hooks/usePoiTriggers';
+import { BRAGA_POIS } from './src/constants/bragaMapData';
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('Home');
-
-  // Sub-screens state: null | 'PoiDetail' | 'Navigation' | 'TripSummary'
   const [subScreen, setSubScreen] = useState(null);
   const [selectedPoi, setSelectedPoi] = useState(null);
   const [selectedTrip, setSelectedTrip] = useState(null);
 
-  // State khusus Geofence Trigger Notification (hanya muncul jika geofence terpicu)
-  const [geofencePoi, setGeofencePoi] = useState(null);
+  // State POI dari backend (pakai BRAGA_POIS sebagai cadangan awal)
+  const [pois, setPois] = useState(BRAGA_POIS);
+  const [manualGeofencePoi, setManualGeofencePoi] = useState(null);
+
+  // 1. Ambil dataset POI asli dari GET /api/pois saat aplikasi dibuka
+  useEffect(() => {
+    let isMounted = true;
+    fetchPois()
+      .then((data) => {
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          // Pastikan properti `coordinate` tersedia untuk react-native-maps
+          const normalized = data.map((item) => ({
+            ...item,
+            coordinate: item.coordinate || {
+              latitude: Number(item.latitude),
+              longitude: Number(item.longitude),
+            },
+          }));
+          setPois(normalized);
+        }
+      })
+      .catch((err) => {
+        console.warn('API belum terhubung, menggunakan data lokal:', err.message);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // 2. Baca lokasi GPS perangkat & stabilkan referensi objeknya dengan useMemo
+  const locationState = useForegroundLocation();
+  const rawCoords =
+    locationState?.sample ||
+    locationState?.location?.coords ||
+    locationState?.coords ||
+    locationState?.location ||
+    locationState;
+
+  const lat = rawCoords?.latitude;
+  const lng = rawCoords?.longitude;
+
+  const currentSample = useMemo(() => {
+    if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+    return { latitude: lat, longitude: lng };
+  }, [lat, lng]);
+
+  const { event, dismiss } = usePoiTriggers(pois, currentSample, Boolean(currentSample));
+
+  // Gabungkan trigger GPS asli dengan simulasi tekan-lama tombol bookmark
+  const activeTriggerPoi = event?.poi || manualGeofencePoi;
+
+  const handleCloseModal = () => {
+    if (event) dismiss();
+    setManualGeofencePoi(null);
+  };
 
   const handleOpenDetail = (poi) => {
     setSelectedPoi(poi);
@@ -77,6 +135,7 @@ export default function App() {
       case 'Home':
         return (
           <HomeScreen
+            pois={pois}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
             onUseTrip={handleUseTrip}
@@ -85,16 +144,10 @@ export default function App() {
       case 'Explore':
         return (
           <ExploreScreen
+            pois={pois}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
-            // Tekan tahan ikon bookmark di kanan atas Explore untuk menguji pop-up geofence
-            onSimulateGeofence={() =>
-              setGeofencePoi({
-                name: 'Braga Citywalk',
-                distance: '12km',
-                rating: '5.0',
-              })
-            }
+            onSimulateGeofence={() => setManualGeofencePoi(pois[0])}
           />
         );
       case 'Trip':
@@ -102,13 +155,11 @@ export default function App() {
       case 'Account':
         return <AccountScreen />;
       default:
-        return <HomeScreen />;
+        return <HomeScreen pois={pois} />;
     }
   };
 
-  // POI Detail tampil penuh tanpa BottomNavBar sesuai desain
   const showBottomNav = subScreen !== 'PoiDetail';
-
   const isLightStatusBar =
     subScreen === null && (activeTab === 'Home' || activeTab === 'Account');
 
@@ -125,17 +176,17 @@ export default function App() {
         <BottomNavBar activeTab={activeTab} onSelectTab={handleSelectTab} />
       )}
 
-      {/* Geofence Notification Pop-up */}
+      {/* Geofence Notification Pop-up (Otomatis dari GPS atau Simulasi) */}
       <PoiTriggerModal
-        visible={Boolean(geofencePoi)}
-        poi={geofencePoi}
-        onClose={() => setGeofencePoi(null)}
+        visible={Boolean(activeTriggerPoi)}
+        poi={activeTriggerPoi}
+        onClose={handleCloseModal}
         onCheckNow={(poi) => {
-          setGeofencePoi(null);
+          handleCloseModal();
           handleOpenDetail(poi);
         }}
         onDirections={(poi) => {
-          setGeofencePoi(null);
+          handleCloseModal();
           handleOpenDirections(poi);
         }}
       />

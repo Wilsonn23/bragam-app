@@ -1,10 +1,20 @@
 // Titik tengah koridor Jl. Braga, Bandung
 export const BRAGA_REGION = {
-  latitude: -6.9175,
-  longitude: 107.6093,
-  latitudeDelta: 0.0055,
-  longitudeDelta: 0.0055,
+  latitude: -6.9177,
+  longitude: 107.6094,
+  latitudeDelta: 0.0085,
+  longitudeDelta: 0.0085,
 };
+
+// Koordinat poligon batas blok koridor Jl. Braga (Utara: Jl. Suniaraja -> Selatan: Jl. Asia Afrika)
+export const BRAGA_ZONE_POLYGON = [
+  { latitude: -6.9143, longitude: 107.6087 }, // Barat Laut (dekat Jl. Suniaraja / Banceuy)
+  { latitude: -6.9143, longitude: 107.6103 }, // Timur Laut (dekat Jl. Lembong / Tamblong)
+  { latitude: -6.9176, longitude: 107.6103 }, // Timur Tengah (blok Braga - Naripan)
+  { latitude: -6.9212, longitude: 107.6101 }, // Tenggara (dekat Jl. Asia Afrika)
+  { latitude: -6.9212, longitude: 107.6086 }, // Barat Daya (dekat Cikapundung / Asia Afrika)
+  { latitude: -6.9176, longitude: 107.6086 }, // Barat Tengah (blok Braga - Cikapundung)
+];
 
 // Daftar koordinat nyata destinasi di sepanjang Jl. Braga
 export const BRAGA_POIS = [
@@ -42,28 +52,35 @@ export const BRAGA_POIS = [
   },
 ];
 
-// Tema visual peta ungu-lavender menyesuaikan prototipe BRAGAm
-export const BRAGA_PURPLE_MAP_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#E6DCF7' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#4B229E' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#FFFFFF' }] },
+// Tema peta dasar monokrom abu-abu untuk area di luar Jl. Braga
+export const BRAGA_GRAY_MAP_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#EAEAEA' }] },
+  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#7A7A7A' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#F7F7F7' }] },
   {
     featureType: 'road',
     elementType: 'geometry',
     stylers: [{ color: '#FFFFFF' }],
   },
   {
-    featureType: 'road.arterial',
-    elementType: 'geometry',
-    stylers: [{ color: '#FFFFFF' }],
+    featureType: 'road',
+    elementType: 'geometry.stroke',
+    stylers: [{ color: '#D6D6D6' }],
   },
   {
-    featureType: 'poi.business',
-    stylers: [{ visibility: 'off' }], // Sembunyikan ikon bawaan Google agar marker BRAGAm menonjol
+    featureType: 'road.arterial',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#616161' }],
+  },
+  {
+    featureType: 'poi.park',
+    elementType: 'geometry',
+    stylers: [{ color: '#DFDFDF' }],
   },
   {
     featureType: 'water',
     elementType: 'geometry',
-    stylers: [{ color: '#CBB8F0' }],
+    stylers: [{ color: '#D2D2D2' }],
   },
 ];
