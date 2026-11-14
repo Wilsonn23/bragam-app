@@ -105,9 +105,16 @@ npm start
 
 Jika tabel sudah pernah dibuat sebelum schema terbaru, jalankan `psql "$DATABASE_URL" -f schema.sql` lagi sebelum import CSV. Trigger akan mengisi `location` dari `latitude` dan `longitude`.
 
+Schema tersebut juga membuat `public.users` yang terhubung ke `auth.users`. User baru dari Supabase Auth otomatis dibuatkan profil di `public.users`; password tetap dikelola Supabase Auth dan tidak disimpan di tabel aplikasi.
+
 Endpoint mobile yang tersedia:
 * `GET /api/pois` mengambil seluruh POI.
 * `GET /api/pois/nearby?latitude=-6.91775&longitude=107.60912` mengambil POI terdekat dalam radius geofence.
+* `GET /api/users` mengambil daftar user tanpa `password_hash`.
+* `GET /api/users/:id` mengambil satu user tanpa `password_hash`.
+* `POST /api/users` membuat user dengan body `{ "email": "...", "name": "...", "password": "..." }`.
+* `PATCH /api/users/:id` memperbarui `email`, `name`, atau `password`.
+* `DELETE /api/users/:id` menghapus user.
 
 Saat menjalankan Expo di perangkat fisik, set `EXPO_PUBLIC_API_URL` ke alamat IP LAN komputer yang menjalankan backend, bukan `localhost`.
 
