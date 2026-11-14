@@ -22,6 +22,22 @@ export default function App() {
   // State khusus Geofence Trigger Notification (hanya muncul jika geofence terpicu)
   const [geofencePoi, setGeofencePoi] = useState(null);
 
+  // Hitung penyusutan tinggi window saat keyboard muncul agar navbar & overlay tetap stay di bawah
+  const [fullHeight, setFullHeight] = useState(0);
+  const [currentHeight, setCurrentHeight] = useState(0);
+  const [navHeight, setNavHeight] = useState(0);
+
+  const handleContainerLayout = (event) => {
+    const { height } = event.nativeEvent.layout;
+    if (height > 0) {
+      setCurrentHeight(height);
+      setFullHeight((prev) => (height > prev ? height : prev));
+    }
+  };
+
+  const windowShrink =
+    fullHeight > 0 && currentHeight > 0 ? Math.max(0, fullHeight - currentHeight) : 0;
+
   const handleOpenDetail = (poi) => {
     setSelectedPoi(poi);
     setSubScreen('PoiDetail');
@@ -85,6 +101,7 @@ export default function App() {
       case 'Explore':
         return (
           <ExploreScreen
+            windowShrink={windowShrink}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
             // Tekan tahan ikon bookmark di kanan atas Explore untuk menguji pop-up geofence
@@ -113,16 +130,31 @@ export default function App() {
     subScreen === null && (activeTab === 'Home' || activeTab === 'Account');
 
   return (
-    <View style={styles.container}>
+    <View onLayout={handleContainerLayout} style={styles.container}>
       <StatusBar
         barStyle={isLightStatusBar ? 'light-content' : 'dark-content'}
         backgroundColor={isLightStatusBar ? COLORS.primaryPurple : COLORS.softLilacBg}
       />
 
-      <View style={styles.screenWrapper}>{renderContent()}</View>
+      <View
+        style={[
+          styles.screenWrapper,
+          showBottomNav && navHeight > 0 ? { paddingBottom: navHeight } : null,
+        ]}
+      >
+        {renderContent()}
+      </View>
 
       {showBottomNav && (
-        <BottomNavBar activeTab={activeTab} onSelectTab={handleSelectTab} />
+        <View
+          onLayout={(event) => {
+            const h = event.nativeEvent.layout.height;
+            if (h > 0 && h !== navHeight) setNavHeight(h);
+          }}
+          style={[styles.fixedBottomNav, { bottom: -windowShrink }]}
+        >
+          <BottomNavBar activeTab={activeTab} onSelectTab={handleSelectTab} />
+        </View>
       )}
 
       {/* Geofence Notification Pop-up */}
@@ -150,5 +182,11 @@ const styles = StyleSheet.create({
   },
   screenWrapper: {
     flex: 1,
+  },
+  fixedBottomNav: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
 });
