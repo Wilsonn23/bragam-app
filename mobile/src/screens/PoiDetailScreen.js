@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   SafeAreaView,
+  Image,
 } from 'react-native';
 import {
   Ionicons,
@@ -13,22 +14,26 @@ import {
 } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 import { WireframeImageBox } from '../components/PoiCardComponents';
+import { detailContent } from '../poi/detail';
 
 const DETAIL_TABS = ['Overview', 'Menu', 'Review', 'About'];
 
-export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
+export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audio = undefined }) {
   const [activeTab, setActiveTab] = useState('Overview');
-  const [isAudioOn, setIsAudioOn] = useState(false);
+  const [failedImage, setFailedImage] = useState(null);
 
-  const placeName = poi?.name || 'Braga Citywalk';
-  const distance = poi?.distance || '12km';
-  const rating = poi?.rating || '5.0';
+  const placeName = poi.name;
+  const distance = poi.distance;
+  const rating = poi.rating;
+  const content = detailContent(poi);
+  const isAudioOn = audio?.currentId === poi.id && audio.status.playing;
+  const audioFailed = audio?.currentId === poi.id && (audio.error || audio.status.error);
 
   return (
     <SafeAreaView style={styles.root}>
       {/* Top Back Button */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Kembali" onPress={onBack} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={COLORS.darkPurple} />
         </TouchableOpacity>
       </View>
@@ -43,12 +48,12 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
             <View style={styles.pinBadge}>
               <Ionicons name="location" size={18} color={COLORS.darkPurple} />
             </View>
-            <Text style={styles.distanceText}>{distance}</Text>
+            {distance && <Text style={styles.distanceText}>{distance}</Text>}
           </View>
 
           <View style={styles.titleCol}>
             <Text style={styles.poiTitle}>{placeName}</Text>
-            <View style={styles.ratingRow}>
+            {rating && <View style={styles.ratingRow}>
               <Text style={styles.ratingText}>{rating}</Text>
               {[1, 2, 3, 4].map((star) => (
                 <Ionicons
@@ -59,16 +64,20 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
                   style={{ marginLeft: 2 }}
                 />
               ))}
-            </View>
+            </View>}
           </View>
 
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => setIsAudioOn(!isAudioOn)}
-            style={styles.audioBtn}
+            accessibilityRole="button"
+            accessibilityLabel={content.audioUrl ? isAudioOn ? 'Jeda narasi' : 'Putar narasi' : 'Audio belum tersedia'}
+            accessibilityState={{ disabled: !content.audioUrl || !audio }}
+            disabled={!content.audioUrl || !audio}
+            onPress={() => audio?.toggle({ ...poi, audioUrl: content.audioUrl })}
+            style={[styles.audioBtn, (!content.audioUrl || !audio) && { opacity: 0.5 }]}
           >
             <Text style={styles.audioBtnText}>
-              {isAudioOn ? 'Matikan Audio' : 'Nyalakan Audio'}
+              {!content.audioUrl ? 'Audio belum tersedia' : isAudioOn ? 'Matikan Audio' : 'Nyalakan Audio'}
             </Text>
             <Ionicons
               name={isAudioOn ? 'volume-mute' : 'volume-high'}
@@ -78,11 +87,15 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
             />
           </TouchableOpacity>
         </View>
+        <Text style={[styles.detailText, { paddingHorizontal: 20, marginTop: 12 }]}>{poi.category}</Text>
+        {audioFailed && <Text accessibilityLiveRegion="polite" style={[styles.detailText, { paddingHorizontal: 20 }]}>Audio tidak dapat diputar. Coba lagi.</Text>}
 
         {/* Action Pills: Directions, Save, Add to Itinerary */}
         <View style={styles.actionRow}>
           <TouchableOpacity
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`Petunjuk arah ke ${placeName}`}
             onPress={() => onOpenDirections?.(poi)}
             style={styles.outlinePillBtn}
           >
@@ -95,7 +108,7 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity activeOpacity={0.8} style={styles.outlinePillBtn}>
+          <TouchableOpacity activeOpacity={0.8} disabled accessibilityRole="button" accessibilityState={{ disabled: true }} accessibilityHint="Fitur ini belum tersedia" style={[styles.outlinePillBtn, { opacity: 0.5 }]}>
             <Text style={styles.outlinePillText}>Save</Text>
             <Ionicons
               name="bookmark"
@@ -105,7 +118,7 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity activeOpacity={0.8} style={styles.outlinePillBtn}>
+          <TouchableOpacity activeOpacity={0.8} disabled accessibilityRole="button" accessibilityState={{ disabled: true }} accessibilityHint="Fitur ini belum tersedia" style={[styles.outlinePillBtn, { opacity: 0.5 }]}>
             <Text style={styles.outlinePillText}>Add to Itinerary</Text>
             <Ionicons
               name="add-circle-outline"
@@ -118,7 +131,9 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
 
         {/* Asymmetric 3-Box Wireframe Gallery */}
         <View style={styles.galleryGrid}>
-          <WireframeImageBox style={styles.leftLargeBox} height={232} />
+          {poi.imageUrl && failedImage !== poi.imageUrl ?
+            <Image source={{ uri: poi.imageUrl }} accessibilityLabel={`Foto ${placeName}`} style={[styles.leftLargeBox, { height: 232, borderRadius: RADIUS.md }]} onError={() => setFailedImage(poi.imageUrl)} /> :
+            <WireframeImageBox style={styles.leftLargeBox} height={232} />}
           <View style={styles.rightStackedCol}>
             <WireframeImageBox width="100%" height={111} />
             <WireframeImageBox width="100%" height={111} />
@@ -133,6 +148,8 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
               <TouchableOpacity
                 key={tab}
                 activeOpacity={0.85}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isSelected }}
                 onPress={() => setActiveTab(tab)}
                 style={[styles.tabPill, isSelected && styles.tabPillActive]}
               >
@@ -152,6 +169,7 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
         {/* Tab Content */}
         {activeTab === 'Overview' ? (
           <View style={styles.overviewList}>
+            <View style={styles.detailRow}><Text style={styles.detailText}>{content.description}</Text></View>
             {/* Row 1: Address */}
             <View style={styles.detailRow}>
               <Ionicons
@@ -161,7 +179,7 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
                 style={styles.detailIcon}
               />
               <Text style={styles.detailText}>
-                Jl. Braga No.99–101, Braga, Kec. Sumur{'\n'}Bandung, Kota Bandung, Jawa Barat 40111
+                {content.address}
               </Text>
             </View>
 
@@ -174,9 +192,7 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
                 style={styles.detailIcon}
               />
               <View style={styles.hoursGroup}>
-                <Text style={styles.detailText}>Closed</Text>
-                <View style={styles.verticalDivider} />
-                <Text style={styles.detailText}>Opens 10.00 am</Text>
+                <Text style={styles.detailText}>{content.openingHours}</Text>
               </View>
             </View>
 
@@ -189,14 +205,14 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
                 style={styles.detailIcon}
               />
               <Text style={styles.detailText}>
-                http://www.bragacitywalk.co.id/
+                {content.website}
               </Text>
             </View>
           </View>
         ) : (
           <View style={styles.placeholderTabBox}>
             <Text style={styles.placeholderTabText}>
-              Konten {activeTab} untuk {placeName} akan tampil di sini.
+              {activeTab === 'Menu' ? content.menu : activeTab === 'Review' ? content.reviews : content.description}
             </Text>
           </View>
         )}
