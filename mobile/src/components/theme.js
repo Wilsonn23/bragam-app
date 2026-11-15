@@ -1,13 +1,13 @@
 export const COLORS = {
   // Primary & Dark Purples
-  darkPurple: '#35166F',      // Header top, dark buttons, bottom nav bar
-  activeNavPill: '#4B229E',   // Pill background tab aktif di bottom nav
-  primaryPurple: '#5B2BBF',   // Header bottom, border utama, ikon aktif
-  mediumPurple: '#7E57C2',    // Aksen pin map & border sekunder
+  darkPurple: '#35166F',
+  activeNavPill: '#4B229E',
+  primaryPurple: '#5B2BBF',
+  mediumPurple: '#7E57C2',
 
   // Tints & Backgrounds
-  lavenderTint: '#EAE2F8',    // Latar ikon bulat & placeholder gambar
-  softLilacBg: '#F9F7FD',     // Latar belakang halaman Trip & Account
+  lavenderTint: '#EAE2F8',
+  softLilacBg: '#F9F7FD',
   white: '#FFFFFF',
 
   // Typography
@@ -28,8 +28,20 @@ export const RADIUS = {
   pill: 999,
 };
 
-// Legacy primitives still used by the GPS and route-based detail screens.
+// Kompatibilitas untuk komponen dari branch main (ActionButton.js, dll.)
 export const theme = {
-  background: '#ffffff', surface: '#f0f0f0', ink: '#172338', muted: '#4b596b',
-  primary: '#164b86', error: '#a52222', overlay: 'rgba(0,0,0,0.55)',
+  primary: COLORS.primaryPurple,
+  primaryDark: COLORS.darkPurple,
+  secondary: COLORS.mediumPurple,
+  surface: COLORS.white,
+  background: COLORS.softLilacBg,
+  ink: COLORS.textPrimary,
+  muted: COLORS.textSecondary,
+  error: "#a52222",
+  overlay: "rgba(0,0,0,0.55)",
+  text: COLORS.textPrimary,
+  textSecondary: COLORS.textSecondary,
+  border: COLORS.borderSubtle,
 };
+
+export default theme;

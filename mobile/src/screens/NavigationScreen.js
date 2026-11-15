@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
+  Platform,
 } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import {
@@ -16,7 +17,7 @@ import { COLORS, RADIUS } from '../components/theme';
 import {
   BRAGA_REGION,
   BRAGA_POIS,
-  BRAGA_PURPLE_MAP_STYLE,
+  BRAGA_GRAY_MAP_STYLE,
 } from '../constants/bragaMapData';
 import { fetchWalkingRoute } from '../utils/directionsApi';
 
@@ -158,10 +159,11 @@ export default function NavigationScreen({ poi, onBack }) {
       <View style={styles.mapCanvas}>
         <MapView
           ref={mapRef}
-          provider={PROVIDER_GOOGLE}
+          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           style={StyleSheet.absoluteFill}
           initialRegion={BRAGA_REGION}
-          customMapStyle={BRAGA_PURPLE_MAP_STYLE}
+          customMapStyle={Platform.OS === 'android' ? BRAGA_GRAY_MAP_STYLE : undefined}
+          userInterfaceStyle="light"
           showsUserLocation={true}
           showsMyLocationButton={false}
           showsCompass={false}

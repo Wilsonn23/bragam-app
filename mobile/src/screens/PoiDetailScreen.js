@@ -5,10 +5,14 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 import { WireframeImageBox } from '../components/PoiCardComponents';
 import { getOperatingStatus, getPoiDetailFields, getPoiGalleryImages, getRatingStars } from '../poi/presentation';
+import { useAppActive, useForegroundLocation } from '../hooks/useForegroundLocation';
+import { distanceMeters } from '../location/distance';
 
 const DETAIL_TABS = ['Overview', 'Menu', 'Review', 'About'];
 
-export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audioControl, isOffline = false }) {
+export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audioControl }) {
+  const appActive = useAppActive();
+  const { sample } = useForegroundLocation(appActive);
   const [activeTab, setActiveTab] = useState('Overview');
   const [failedImages, setFailedImages] = useState([]);
   const [now, setNow] = useState(() => Date.now());
@@ -19,7 +23,7 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audioCo
     });
     return () => { clearInterval(timer); subscription.remove(); };
   }, []);
-  const fields = getPoiDetailFields(poi);
+  const fields = getPoiDetailFields({ ...poi, distanceMeters: distanceMeters(sample, poi) });
   const operatingStatus = getOperatingStatus(poi.openingHours, new Date(now));
   const images = getPoiGalleryImages(poi).filter(uri => !failedImages.includes(uri));
 
@@ -31,7 +35,6 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audioCo
         </TouchableOpacity>
       </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {isOffline && <Text style={styles.offlineNotice}>Data tersimpan; informasi mungkin belum mutakhir.</Text>}
         <View style={styles.headerInfoRow}>
           <View style={styles.distanceCol}>
             <View style={styles.pinBadge}><Ionicons name="location" size={18} color={COLORS.darkPurple} /></View>
@@ -159,7 +162,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   categoryText: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 4 },
-  offlineNotice: { fontSize: 12, color: COLORS.textSecondary, marginHorizontal: 20, marginBottom: 8 },
   galleryImage: { width: 220, height: 232, borderRadius: RADIUS.md, backgroundColor: COLORS.lavenderTint },
   galleryCaption: { color: COLORS.textSecondary, fontSize: 12, marginHorizontal: 20, marginTop: 6 },
   disabled: { opacity: 0.45 },

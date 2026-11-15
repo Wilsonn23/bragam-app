@@ -34,8 +34,7 @@ export default function PoiDetail() {
       <Ionicons name={active && audio.status.playing ? 'pause' : 'volume-high'} size={15} color={COLORS.white} />
     </View>
   </TouchableOpacity>;
-  return <PoiDetailScreen key={poi.id} poi={poi} onBack={back} audioControl={audioControl} onOpenDirections={undefined}
-    isOffline={data.source === 'offline' && !isSimulation} />;
+  return <PoiDetailScreen key={poi.id} poi={poi} onBack={back} audioControl={audioControl} onOpenDirections={undefined} />;
 }
 
 function DetailState({ message, onBack, onRetry = undefined }) {
