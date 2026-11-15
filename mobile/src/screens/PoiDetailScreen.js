@@ -1,208 +1,110 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  SafeAreaView,
-} from 'react-native';
-import {
-  Ionicons,
-  MaterialCommunityIcons,
-} from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image, AppState } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 import { WireframeImageBox } from '../components/PoiCardComponents';
+import { getOperatingStatus, getPoiDetailFields, getPoiGalleryImages, getRatingStars } from '../poi/presentation';
 
 const DETAIL_TABS = ['Overview', 'Menu', 'Review', 'About'];
 
-export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
+export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audioControl, isOffline = false }) {
   const [activeTab, setActiveTab] = useState('Overview');
-  const [isAudioOn, setIsAudioOn] = useState(false);
-
-  const placeName = poi?.name || 'Braga Citywalk';
-  const distance = poi?.distance || '12km';
-  const rating = poi?.rating || '5.0';
+  const [failedImages, setFailedImages] = useState([]);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') setNow(Date.now());
+    });
+    return () => { clearInterval(timer); subscription.remove(); };
+  }, []);
+  const fields = getPoiDetailFields(poi);
+  const operatingStatus = getOperatingStatus(poi.openingHours, new Date(now));
+  const images = getPoiGalleryImages(poi).filter(uri => !failedImages.includes(uri));
 
   return (
     <SafeAreaView style={styles.root}>
-      {/* Top Back Button */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Kembali" onPress={onBack} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={COLORS.darkPurple} />
         </TouchableOpacity>
       </View>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Header Info + Nyalakan Audio */}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {isOffline && <Text style={styles.offlineNotice}>Data tersimpan; informasi mungkin belum mutakhir.</Text>}
         <View style={styles.headerInfoRow}>
           <View style={styles.distanceCol}>
-            <View style={styles.pinBadge}>
-              <Ionicons name="location" size={18} color={COLORS.darkPurple} />
-            </View>
-            <Text style={styles.distanceText}>{distance}</Text>
+            <View style={styles.pinBadge}><Ionicons name="location" size={18} color={COLORS.darkPurple} /></View>
+            <Text style={styles.distanceText}>{fields.distance}</Text>
           </View>
-
           <View style={styles.titleCol}>
-            <Text style={styles.poiTitle}>{placeName}</Text>
+            <Text accessibilityRole="header" style={styles.poiTitle}>{poi.name}</Text>
+            <Text style={styles.categoryText}>{poi.category}</Text>
             <View style={styles.ratingRow}>
-              <Text style={styles.ratingText}>{rating}</Text>
-              {[1, 2, 3, 4].map((star) => (
-                <Ionicons
-                  key={star}
-                  name="star"
-                  size={14}
-                  color={COLORS.darkPurple}
-                  style={{ marginLeft: 2 }}
-                />
+              <Text style={styles.ratingText}>{fields.rating}</Text>
+              {getRatingStars(poi.rating).map((name, index) => (
+                <Ionicons key={index} name={name} size={14} color={COLORS.darkPurple} />
               ))}
             </View>
           </View>
-
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => setIsAudioOn(!isAudioOn)}
-            style={styles.audioBtn}
-          >
-            <Text style={styles.audioBtnText}>
-              {isAudioOn ? 'Matikan Audio' : 'Nyalakan Audio'}
-            </Text>
-            <Ionicons
-              name={isAudioOn ? 'volume-mute' : 'volume-high'}
-              size={18}
-              color={COLORS.white}
-              style={{ marginLeft: 6 }}
-            />
-          </TouchableOpacity>
+          {audioControl}
         </View>
-
-        {/* Action Pills: Directions, Save, Add to Itinerary */}
         <View style={styles.actionRow}>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => onOpenDirections?.(poi)}
-            style={styles.outlinePillBtn}
-          >
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: !onOpenDirections }} disabled={!onOpenDirections}
+            onPress={() => onOpenDirections?.(poi)} style={[styles.outlinePillBtn, !onOpenDirections && styles.disabled]}>
             <Text style={styles.outlinePillText}>Directions</Text>
-            <MaterialCommunityIcons
-              name="directions"
-              size={17}
-              color={COLORS.darkPurple}
-              style={{ marginLeft: 5 }}
-            />
+            <MaterialCommunityIcons name="directions" size={17} color={COLORS.darkPurple} style={{ marginLeft: 5 }} />
           </TouchableOpacity>
-
-          <TouchableOpacity activeOpacity={0.8} style={styles.outlinePillBtn}>
-            <Text style={styles.outlinePillText}>Save</Text>
-            <Ionicons
-              name="bookmark"
-              size={15}
-              color={COLORS.darkPurple}
-              style={{ marginLeft: 5 }}
-            />
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: true }} disabled style={[styles.outlinePillBtn, styles.disabled]}>
+            <Text style={styles.outlinePillText}>Save</Text><Ionicons name="bookmark" size={15} color={COLORS.darkPurple} style={{ marginLeft: 5 }} />
           </TouchableOpacity>
-
-          <TouchableOpacity activeOpacity={0.8} style={styles.outlinePillBtn}>
-            <Text style={styles.outlinePillText}>Add to Itinerary</Text>
-            <Ionicons
-              name="add-circle-outline"
-              size={17}
-              color={COLORS.darkPurple}
-              style={{ marginLeft: 4 }}
-            />
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: true }} disabled style={[styles.outlinePillBtn, styles.disabled]}>
+            <Text style={styles.outlinePillText}>Add to Itinerary</Text><Ionicons name="add-circle-outline" size={17} color={COLORS.darkPurple} style={{ marginLeft: 4 }} />
           </TouchableOpacity>
         </View>
-
-        {/* Asymmetric 3-Box Wireframe Gallery */}
-        <View style={styles.galleryGrid}>
-          <WireframeImageBox style={styles.leftLargeBox} height={232} />
-          <View style={styles.rightStackedCol}>
-            <WireframeImageBox width="100%" height={111} />
-            <WireframeImageBox width="100%" height={111} />
-          </View>
-        </View>
-
-        {/* Tabs Bar */}
-        <View style={styles.tabsRow}>
-          {DETAIL_TABS.map((tab) => {
-            const isSelected = activeTab === tab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                activeOpacity={0.85}
-                onPress={() => setActiveTab(tab)}
-                style={[styles.tabPill, isSelected && styles.tabPillActive]}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    isSelected && styles.tabTextActive,
-                  ]}
-                >
-                  {tab}
-                </Text>
+        <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryGrid}>
+          {images.length ? images.map((uri, index) => <Image key={uri} source={{ uri }}
+            accessibilityLabel={`Foto ${poi.name} ${index + 1} dari ${images.length}`}
+            onError={() => setFailedImages(previous => [...previous, uri])} style={styles.galleryImage} />) :
+            <WireframeImageBox width={220} height={232} />}
+        </ScrollView>
+        {!images.length && <Text style={styles.galleryCaption}>Foto belum tersedia</Text>}
+        <View style={styles.tabsUnderline}>
+          <View style={styles.tabsRow}>
+            {DETAIL_TABS.map(tab => (
+              <TouchableOpacity key={tab} accessibilityRole="tab" accessibilityState={{ selected: activeTab === tab }}
+                onPress={() => setActiveTab(tab)} style={[styles.tabPill, activeTab === tab && styles.tabPillActive]}>
+                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
               </TouchableOpacity>
-            );
-          })}
+            ))}
+          </View>
         </View>
-
-        {/* Tab Content */}
-        {activeTab === 'Overview' ? (
-          <View style={styles.overviewList}>
-            {/* Row 1: Address */}
-            <View style={styles.detailRow}>
-              <Ionicons
-                name="location"
-                size={22}
-                color={COLORS.darkPurple}
-                style={styles.detailIcon}
-              />
-              <Text style={styles.detailText}>
-                Jl. Braga No.99–101, Braga, Kec. Sumur{'\n'}Bandung, Kota Bandung, Jawa Barat 40111
-              </Text>
-            </View>
-
-            {/* Row 2: Operating Hours */}
-            <View style={styles.detailRow}>
-              <Ionicons
-                name="time-outline"
-                size={22}
-                color={COLORS.darkPurple}
-                style={styles.detailIcon}
-              />
-              <View style={styles.hoursGroup}>
-                <Text style={styles.detailText}>Closed</Text>
-                <View style={styles.verticalDivider} />
-                <Text style={styles.detailText}>Opens 10.00 am</Text>
-              </View>
-            </View>
-
-            {/* Row 3: Website */}
-            <View style={styles.detailRow}>
-              <Ionicons
-                name="globe"
-                size={22}
-                color={COLORS.darkPurple}
-                style={styles.detailIcon}
-              />
-              <Text style={styles.detailText}>
-                http://www.bragacitywalk.co.id/
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.placeholderTabBox}>
-            <Text style={styles.placeholderTabText}>
-              Konten {activeTab} untuk {placeName} akan tampil di sini.
-            </Text>
-          </View>
-        )}
+        <View style={styles.overviewList}>
+          {activeTab === 'Overview' && <>
+            <DetailRow icon="information-circle-outline" value={fields.description} />
+            <DetailRow icon="location-outline" value={fields.address} />
+            <DetailRow icon="time-outline" value={operatingStatus ? `${operatingStatus}  |  ${fields.openingHours}` : fields.openingHours} />
+            <DetailRow icon="globe-outline" value={fields.website} />
+          </>}
+          {activeTab === 'Menu' && <>
+            <DetailRow icon="restaurant-outline" value={fields.menu} />
+            <DetailRow icon="pricetag-outline" value={fields.prices} />
+          </>}
+          {activeTab === 'Review' && <>
+            <DetailRow icon="star-outline" value={fields.ratingSummary} />
+            <DetailRow icon="chatbubble-outline" value={fields.reviews} />
+          </>}
+          {activeTab === 'About' && <DetailRow icon="book-outline" value={fields.history} />}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
+}
+function DetailRow({ icon, value }) {
+  return <View style={styles.detailRow}>
+    <Ionicons name={icon} size={22} color={COLORS.darkPurple} style={styles.detailIcon} />
+    <Text style={styles.detailText}>{value}</Text>
+  </View>;
 }
 
 const styles = StyleSheet.create({
@@ -230,7 +132,8 @@ const styles = StyleSheet.create({
   },
   distanceCol: {
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 8,
+    maxWidth: 62,
   },
   pinBadge: {
     width: 32,
@@ -247,6 +150,7 @@ const styles = StyleSheet.create({
   },
   titleCol: {
     flex: 1,
+    minWidth: 0,
   },
   poiTitle: {
     fontSize: 16,
@@ -254,6 +158,11 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: 4,
   },
+  categoryText: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 4 },
+  offlineNotice: { fontSize: 12, color: COLORS.textSecondary, marginHorizontal: 20, marginBottom: 8 },
+  galleryImage: { width: 220, height: 232, borderRadius: RADIUS.md, backgroundColor: COLORS.lavenderTint },
+  galleryCaption: { color: COLORS.textSecondary, fontSize: 12, marginHorizontal: 20, marginTop: 6 },
+  disabled: { opacity: 0.45 },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -278,12 +187,14 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     marginTop: 14,
     gap: 6,
   },
   outlinePillBtn: {
+    flexGrow: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -312,18 +223,20 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 10,
   },
-  tabsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
+  tabsUnderline: {
     marginTop: 16,
     borderBottomWidth: 3,
     borderBottomColor: COLORS.lavenderTint,
   },
+  tabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+  },
   tabPill: {
+    flex: 1,
     paddingVertical: 7,
-    paddingHorizontal: 16,
+    paddingHorizontal: 2,
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
   },
@@ -334,6 +247,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: COLORS.textPrimary,
+    textAlign: 'center',
   },
   tabTextActive: {
     color: COLORS.white,
@@ -357,6 +271,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textPrimary,
     lineHeight: 19,
+    flexShrink: 1,
   },
   hoursGroup: {
     flexDirection: 'row',

@@ -1,20 +1,27 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, StatusBar } from 'react-native';
+import { View, StyleSheet, StatusBar, Alert } from 'react-native';
+import { router } from 'expo-router';
 import BottomNavBar from './src/components/BottomNavBar';
 import PoiTriggerModal from './src/components/PoiTriggerModal';
 import HomeScreen from './src/screens/HomeScreen';
 import ExploreScreen from './src/screens/ExploreScreen';
 import TripScreen from './src/screens/TripScreen';
 import AccountScreen from './src/screens/AccountScreen';
-import PoiDetailScreen from './src/screens/PoiDetailScreen';
 import NavigationScreen from './src/screens/NavigationScreen';
 import TripRouteSummaryScreen from './src/screens/TripRouteSummaryScreen';
 import { COLORS } from './src/components/theme';
+import { usePois } from './src/poi/PoiProvider';
+import { useAppActive, useForegroundLocation } from './src/hooks/useForegroundLocation';
+import { usePoiTriggers } from './src/hooks/usePoiTriggers';
 
 export default function App() {
+  const { pois, loading, error, source } = usePois();
+  const active = useAppActive();
+  const gps = useForegroundLocation(active);
+  const { event, dismiss } = usePoiTriggers(pois, gps.sample, active);
   const [activeTab, setActiveTab] = useState('Home');
 
-  // Sub-screens state: null | 'PoiDetail' | 'Navigation' | 'TripSummary'
+  // Sub-screens state: null | 'Navigation' | 'TripSummary'
   const [subScreen, setSubScreen] = useState(null);
   const [selectedPoi, setSelectedPoi] = useState(null);
   const [selectedTrip, setSelectedTrip] = useState(null);
@@ -23,8 +30,15 @@ export default function App() {
   const [geofencePoi, setGeofencePoi] = useState(null);
 
   const handleOpenDetail = (poi) => {
-    setSelectedPoi(poi);
-    setSubScreen('PoiDetail');
+    // Main's prototype cards still use different IDs; resolve only an unambiguous API record.
+    const byId = pois.find(item => item.id === poi?.id);
+    const byName = pois.filter(item => item.name.toLowerCase() === poi?.name?.toLowerCase());
+    const selected = byId || (byName.length === 1 ? byName[0] : null);
+    if (!selected) {
+      Alert.alert('Destinasi belum tersedia', loading ? 'Data destinasi sedang dimuat.' : error || 'Data detail destinasi tidak ditemukan.');
+      return;
+    }
+    router.push({ pathname: '/poi/[id]', params: { id: selected.id } });
   };
 
   const handleOpenDirections = (poi) => {
@@ -45,16 +59,6 @@ export default function App() {
   };
 
   const renderContent = () => {
-    if (subScreen === 'PoiDetail') {
-      return (
-        <PoiDetailScreen
-          poi={selectedPoi}
-          onBack={() => setSubScreen(null)}
-          onOpenDirections={handleOpenDirections}
-        />
-      );
-    }
-
     if (subScreen === 'Navigation') {
       return (
         <NavigationScreen
@@ -85,16 +89,12 @@ export default function App() {
       case 'Explore':
         return (
           <ExploreScreen
+            pois={pois}
+            dataSource={source}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
             // Tekan tahan ikon bookmark di kanan atas Explore untuk menguji pop-up geofence
-            onSimulateGeofence={() =>
-              setGeofencePoi({
-                name: 'Braga Citywalk',
-                distance: '12km',
-                rating: '5.0',
-              })
-            }
+            onSimulateGeofence={__DEV__ && pois.length ? () => setGeofencePoi(pois[0]) : undefined}
           />
         );
       case 'Trip':
@@ -102,12 +102,12 @@ export default function App() {
       case 'Account':
         return <AccountScreen />;
       default:
-        return <HomeScreen />;
+        return <HomeScreen onOpenDetail={handleOpenDetail} onOpenDirections={handleOpenDirections} onUseTrip={handleUseTrip} />;
     }
   };
 
-  // POI Detail tampil penuh tanpa BottomNavBar sesuai desain
-  const showBottomNav = subScreen !== 'PoiDetail';
+  const visiblePoi = event ? { ...event.poi, distanceMeters: event.distanceMeters } : geofencePoi;
+  const closePoi = () => { if (event) dismiss(); else setGeofencePoi(null); };
 
   const isLightStatusBar =
     subScreen === null && (activeTab === 'Home' || activeTab === 'Account');
@@ -116,26 +116,25 @@ export default function App() {
     <View style={styles.container}>
       <StatusBar
         barStyle={isLightStatusBar ? 'light-content' : 'dark-content'}
-        backgroundColor={isLightStatusBar ? COLORS.primaryPurple : COLORS.softLilacBg}
       />
 
       <View style={styles.screenWrapper}>{renderContent()}</View>
 
-      {showBottomNav && (
-        <BottomNavBar activeTab={activeTab} onSelectTab={handleSelectTab} />
-      )}
+      <BottomNavBar activeTab={activeTab} onSelectTab={handleSelectTab} />
 
       {/* Geofence Notification Pop-up */}
       <PoiTriggerModal
-        visible={Boolean(geofencePoi)}
-        poi={geofencePoi}
-        onClose={() => setGeofencePoi(null)}
+        visible={Boolean(visiblePoi)}
+        poi={visiblePoi}
+        onClose={closePoi}
+        onSave={undefined}
+        onAddToItinerary={undefined}
         onCheckNow={(poi) => {
-          setGeofencePoi(null);
+          closePoi();
           handleOpenDetail(poi);
         }}
         onDirections={(poi) => {
-          setGeofencePoi(null);
+          closePoi();
           handleOpenDirections(poi);
         }}
       />

@@ -4,6 +4,7 @@ const { Pool } = require('pg');
 const swaggerUi = require('swagger-ui-express');
 const usersRouter = require('./routes/users');
 const openapiSpec = require('./openapi');
+const { toPoiResponse } = require('./poiResponse');
 require('dotenv').config();
 
 const app = express();
@@ -34,7 +35,8 @@ app.get('/api/pois', async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
-             description, notification_title, audio_guide_url
+             description, history, opening_hours, menu_highlights, price_min, price_max,
+             rating, reviews_count, notification_title, audio_guide_url
       FROM pois
       ORDER BY id
     `);
@@ -58,7 +60,8 @@ app.get('/api/pois/nearby', async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
-             description, notification_title, audio_guide_url,
+             description, history, opening_hours, menu_highlights, price_min, price_max,
+             rating, reviews_count, notification_title, audio_guide_url,
              ST_Distance(
                location::geography,
                ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
@@ -85,22 +88,6 @@ app.use((error, req, res, next) => {
   console.error(error);
   res.status(500).json({ error: 'Database request failed.' });
 });
-
-function toPoiResponse(row) {
-  return {
-    id: row.id,
-    name: row.name,
-    category: row.category,
-    latitude: Number(row.latitude),
-    longitude: Number(row.longitude),
-    triggerRadiusMeters: Number(row.radius_meters),
-    shortDescription: row.description || '',
-    notificationTitle: row.notification_title || '',
-    imageUrl: undefined,
-    audioGuideUrl: row.audio_guide_url || undefined,
-    distanceMeters: row.distance_meters === undefined ? undefined : Number(row.distance_meters),
-  };
-}
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

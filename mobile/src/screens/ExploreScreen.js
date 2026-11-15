@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,6 @@ import { WireframeImageBox, PoiDetailFooter } from '../components/PoiCardCompone
 import SearchPoiOverlay from '../components/SearchPoiOverlay';
 import {
   BRAGA_REGION,
-  BRAGA_POIS,
   BRAGA_PURPLE_MAP_STYLE,
 } from '../constants/bragaMapData';
 
@@ -29,36 +28,38 @@ export default function ExploreScreen({
   onOpenDetail,
   onOpenDirections,
   onSimulateGeofence,
+  pois = [],
+  dataSource,
 }) {
   const mapRef = useRef(null);
-  const [selectedMarker, setSelectedMarker] = useState(BRAGA_POIS[0]);
+  const mapPois = pois.map(poi => ({ ...poi, coordinate: { latitude: poi.latitude, longitude: poi.longitude } }));
   const [activeSegment, setActiveSegment] = useState('nearby'); // 'nearby' | 'recommendation'
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const sheetHeight = useRef(new Animated.Value(COLLAPSED_HEIGHT)).current;
-  const currentHeightRef = useRef(COLLAPSED_HEIGHT);
+  const [sheetHeight] = useState(() => new Animated.Value(COLLAPSED_HEIGHT));
+  const [currentHeight, setCurrentHeight] = useState(COLLAPSED_HEIGHT);
 
   const handleRecenterBraga = () => {
     mapRef.current?.animateToRegion(BRAGA_REGION, 600);
   };
 
-  const animateSheet = (toExpanded) => {
+  const animateSheet = useCallback((toExpanded) => {
     const target = toExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
     setIsExpanded(toExpanded);
-    currentHeightRef.current = target;
+    setCurrentHeight(target);
     Animated.spring(sheetHeight, {
       toValue: target,
       useNativeDriver: false,
       bounciness: 4,
     }).start();
-  };
+  }, [sheetHeight]);
 
-  const panResponder = useRef(
+  const panResponder = useMemo(() =>
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
       onPanResponderMove: (_, gesture) => {
-        const nextHeight = currentHeightRef.current - gesture.dy;
+        const nextHeight = currentHeight - gesture.dy;
         if (nextHeight >= COLLAPSED_HEIGHT - 20 && nextHeight <= EXPANDED_HEIGHT + 20) {
           sheetHeight.setValue(nextHeight);
         }
@@ -69,11 +70,11 @@ export default function ExploreScreen({
         } else if (gesture.dy > 40) {
           animateSheet(false);
         } else {
-          animateSheet(currentHeightRef.current > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
+          animateSheet(currentHeight > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
         }
       },
     })
-  ).current;
+  , [animateSheet, currentHeight, sheetHeight]);
 
   return (
     <View style={styles.root}>
@@ -89,12 +90,11 @@ export default function ExploreScreen({
           showsMyLocationButton={false}
           showsCompass={false}
         >
-          {BRAGA_POIS.map((poi) => (
+          {mapPois.map((poi) => (
             <Marker
               key={poi.id}
               coordinate={poi.coordinate}
               onPress={() => {
-                setSelectedMarker(poi);
                 mapRef.current?.animateToRegion(
                   {
                     ...poi.coordinate,
@@ -103,6 +103,7 @@ export default function ExploreScreen({
                   },
                   400
                 );
+                onOpenDetail?.(poi);
               }}
             >
               <View style={styles.customMarkerRow}>
@@ -237,12 +238,13 @@ export default function ExploreScreen({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.cardsScrollContent}
         >
-          {BRAGA_POIS.map((poi, idx) => (
+          {dataSource === 'offline' && <Text style={{ paddingHorizontal: 20, color: COLORS.textSecondary }}>Menggunakan data POI tersimpan; informasi dapat berubah.</Text>}
+          {mapPois.map((poi, idx) => (
             <View
               key={`${activeSegment}-${poi.id}`}
               style={[
                 styles.poiCardSection,
-                idx !== BRAGA_POIS.length - 1 && styles.poiCardDivider,
+                idx !== mapPois.length - 1 && styles.poiCardDivider,
               ]}
             >
               <ScrollView
@@ -258,8 +260,8 @@ export default function ExploreScreen({
               <View style={{ paddingHorizontal: 20 }}>
                 <PoiDetailFooter
                   name={poi.name}
-                  distance={poi.distance}
-                  rating={poi.rating}
+                  distance={Number.isFinite(poi.distanceMeters) ? `${Math.round(poi.distanceMeters)} m` : 'Jarak belum tersedia'}
+                  rating={poi.rating > 0 ? String(poi.rating) : 'Belum tersedia'}
                   onCheckDetail={() => onOpenDetail?.(poi)}
                   onDirections={() => onOpenDirections?.(poi)}
                 />
@@ -272,6 +274,7 @@ export default function ExploreScreen({
       {/* Search POI Overlay */}
       <SearchPoiOverlay
         visible={isSearchOpen}
+        pois={mapPois}
         onClose={() => setIsSearchOpen(false)}
         onSelectPoi={(poi) => onOpenDetail?.(poi)}
       />

@@ -50,12 +50,12 @@ const SAMPLE_POIS = [
   },
 ];
 
-export default function SearchPoiOverlay({ visible, onClose, onSelectPoi }) {
+export default function SearchPoiOverlay({ visible, onClose, onSelectPoi, pois = SAMPLE_POIS }) {
   const [query, setQuery] = useState('');
 
   if (!visible) return null;
 
-  const filteredPois = SAMPLE_POIS.filter((item) =>
+  const filteredPois = pois.filter((item) =>
     item.name.toLowerCase().includes(query.toLowerCase())
   );
 
@@ -144,13 +144,13 @@ export default function SearchPoiOverlay({ visible, onClose, onSelectPoi }) {
                       color={COLORS.darkPurple}
                     />
                   </View>
-                  <Text style={styles.distText}>{item.distance}</Text>
+                  <Text style={styles.distText}>{item.distance || '—'}</Text>
                 </View>
 
                 <View style={styles.textCol}>
                   <Text style={styles.placeName}>{item.name}</Text>
                   <Text style={styles.placeAddress} numberOfLines={1}>
-                    {item.address}
+                    {item.address || item.category || 'Alamat belum tersedia'}
                   </Text>
                 </View>
 
@@ -170,11 +170,11 @@ export default function SearchPoiOverlay({ visible, onClose, onSelectPoi }) {
 
 const styles = StyleSheet.create({
   overlayRoot: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, right: 0, bottom: 0, left: 0,
     zIndex: 50,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, right: 0, bottom: 0, left: 0,
     backgroundColor: 'rgba(30, 14, 62, 0.45)',
   },
   safeWrapper: {

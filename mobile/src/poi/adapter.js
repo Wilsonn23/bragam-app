@@ -10,7 +10,10 @@ function adaptPois(input) {
   for (const p of input) if (p && typeof p.id === 'string') counts.set(p.id, (counts.get(p.id) || 0) + 1);
   return input.filter(p => p && ['id', 'name', 'category', 'shortDescription'].every(k => typeof p[k] === 'string' && p[k].trim()) &&
     counts.get(p.id) === 1 && validCoordinate(p) && Number.isFinite(p.triggerRadiusMeters) && p.triggerRadiusMeters > 0)
-    .map(p => ({ ...p, imageUrl: typeof p.imageUrl === 'string' && /^https?:\/\//.test(p.imageUrl) ? p.imageUrl : undefined }));
+    .map(p => ({ ...p,
+      imageUrl: typeof p.imageUrl === 'string' && /^https?:\/\//.test(p.imageUrl) ? p.imageUrl : undefined,
+      audioUrl: typeof p.audioGuideUrl === 'string' ? p.audioGuideUrl : p.audioUrl,
+    }));
 }
 // Replace with the surveyed PB03 dataset/API adapter. Never use synthetic places in live mode.
 const pois = [];

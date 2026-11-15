@@ -4,6 +4,7 @@ import Svg, { Line } from 'react-native-svg';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from './theme';
 
+/** @param {{width?: import('react-native').DimensionValue, height?: number, style?: any}} props */
 export function WireframeImageBox({ width = '100%', height = 160, style }) {
   return (
     <View style={[styles.imagePlaceholder, { width, height }, style]}>
@@ -19,10 +20,10 @@ export function PoiDetailFooter({
   name = 'Braga Citywalk',
   distance = '12km',
   rating = '5.0',
-  onCheckDetail,
-  onDirections,
-  onSave,
-  onAddToItinerary,
+  onCheckDetail = undefined,
+  onDirections = undefined,
+  onSave = undefined,
+  onAddToItinerary = undefined,
 }) {
   return (
     <View style={styles.footerWrapper}>
@@ -41,10 +42,10 @@ export function PoiDetailFooter({
           </Text>
           <View style={styles.ratingRow}>
             <Text style={styles.ratingText}>{rating}</Text>
-            {[1, 2, 3, 4].map((star) => (
+            {Number(rating) > 0 && [1, 2, 3, 4, 5].map((star) => (
               <Ionicons
                 key={star}
-                name="star"
+                name={star <= Math.round(Number(rating)) ? 'star' : 'star-outline'}
                 size={14}
                 color={COLORS.darkPurple}
                 style={{ marginLeft: 2 }}
