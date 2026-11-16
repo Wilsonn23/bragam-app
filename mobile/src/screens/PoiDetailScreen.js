@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   SafeAreaView,
+  Alert,
 } from 'react-native';
 import {
   Ionicons,
@@ -16,13 +17,42 @@ import { WireframeImageBox } from '../components/PoiCardComponents';
 
 const DETAIL_TABS = ['Overview', 'Menu', 'Review', 'About'];
 
-export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
+export default function PoiDetailScreen({
+  poi,
+  onBack,
+  onOpenDirections,
+  isSaved = false,
+  onToggleSave,
+  onAddToItinerary,
+}) {
   const [activeTab, setActiveTab] = useState('Overview');
   const [isAudioOn, setIsAudioOn] = useState(false);
 
   const placeName = poi?.name || 'Braga Citywalk';
   const distance = poi?.distance || '12km';
   const rating = poi?.rating || '5.0';
+
+  const activePoi = poi || {
+    id: placeName,
+    name: placeName,
+    distance,
+    rating,
+  };
+
+  const handlePressSave = () => {
+    onToggleSave?.(activePoi);
+  };
+
+  const handlePressAddItinerary = () => {
+    if (onAddToItinerary) {
+      onAddToItinerary(activePoi);
+    } else {
+      Alert.alert(
+        'Ditambahkan ke Itinerary',
+        `${placeName} berhasil ditambahkan ke rencana perjalananmu.`
+      );
+    }
+  };
 
   return (
     <SafeAreaView style={styles.root}>
@@ -79,11 +109,11 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
           </TouchableOpacity>
         </View>
 
-        {/* Action Pills: Directions, Save, Add to Itinerary */}
+        {/* Action Pills: Directions, Save / Saved, Add to Itinerary */}
         <View style={styles.actionRow}>
           <TouchableOpacity
             activeOpacity={0.8}
-            onPress={() => onOpenDirections?.(poi)}
+            onPress={() => onOpenDirections?.(activePoi)}
             style={styles.outlinePillBtn}
           >
             <Text style={styles.outlinePillText}>Directions</Text>
@@ -95,17 +125,35 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity activeOpacity={0.8} style={styles.outlinePillBtn}>
-            <Text style={styles.outlinePillText}>Save</Text>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={handlePressSave}
+            style={[
+              styles.outlinePillBtn,
+              isSaved && styles.savedPillBtnActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.outlinePillText,
+                isSaved && styles.savedPillTextActive,
+              ]}
+            >
+              {isSaved ? 'Saved' : 'Save'}
+            </Text>
             <Ionicons
-              name="bookmark"
+              name={isSaved ? 'bookmark' : 'bookmark-outline'}
               size={15}
-              color={COLORS.darkPurple}
+              color={isSaved ? COLORS.white : COLORS.darkPurple}
               style={{ marginLeft: 5 }}
             />
           </TouchableOpacity>
 
-          <TouchableOpacity activeOpacity={0.8} style={styles.outlinePillBtn}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={handlePressAddItinerary}
+            style={styles.outlinePillBtn}
+          >
             <Text style={styles.outlinePillText}>Add to Itinerary</Text>
             <Ionicons
               name="add-circle-outline"
@@ -161,7 +209,8 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
                 style={styles.detailIcon}
               />
               <Text style={styles.detailText}>
-                Jl. Braga No.99–101, Braga, Kec. Sumur{'\n'}Bandung, Kota Bandung, Jawa Barat 40111
+                {poi?.address ||
+                  'Jl. Braga No.99–101, Braga, Kec. Sumur\nBandung, Kota Bandung, Jawa Barat 40111'}
               </Text>
             </View>
 
@@ -174,9 +223,13 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
                 style={styles.detailIcon}
               />
               <View style={styles.hoursGroup}>
-                <Text style={styles.detailText}>Closed</Text>
+                <Text style={styles.detailText}>
+                  {poi?.status || 'Closed'}
+                </Text>
                 <View style={styles.verticalDivider} />
-                <Text style={styles.detailText}>Opens 10.00 am</Text>
+                <Text style={styles.detailText}>
+                  {poi?.openingHours || 'Opens 10.00 am'}
+                </Text>
               </View>
             </View>
 
@@ -189,7 +242,7 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections }) {
                 style={styles.detailIcon}
               />
               <Text style={styles.detailText}>
-                http://www.bragacitywalk.co.id/
+                {poi?.website || 'http://www.bragacitywalk.co.id/'}
               </Text>
             </View>
           </View>
@@ -294,10 +347,17 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
+  savedPillBtnActive: {
+    backgroundColor: COLORS.darkPurple,
+    borderColor: COLORS.darkPurple,
+  },
   outlinePillText: {
     fontSize: 11,
     fontWeight: '600',
     color: COLORS.textPrimary,
+  },
+  savedPillTextActive: {
+    color: COLORS.white,
   },
   galleryGrid: {
     flexDirection: 'row',

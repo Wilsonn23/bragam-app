@@ -19,6 +19,7 @@ export function PoiDetailFooter({
   name = 'Braga Citywalk',
   distance = '12km',
   rating = '5.0',
+  isSaved = false,
   onCheckDetail,
   onDirections,
   onSave,
@@ -84,13 +85,23 @@ export function PoiDetailFooter({
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={onSave}
-          style={styles.outlinePillBtn}
+          style={[
+            styles.outlinePillBtn,
+            isSaved && styles.savedPillBtnActive,
+          ]}
         >
-          <Text style={styles.outlinePillText}>Save</Text>
+          <Text
+            style={[
+              styles.outlinePillText,
+              isSaved && styles.savedPillTextActive,
+            ]}
+          >
+            {isSaved ? 'Saved' : 'Save'}
+          </Text>
           <Ionicons
             name="bookmark"
             size={15}
-            color={COLORS.darkPurple}
+            color={isSaved ? COLORS.white : COLORS.darkPurple}
             style={{ marginLeft: 5 }}
           />
         </TouchableOpacity>
@@ -208,9 +219,16 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
+  savedPillBtnActive: {
+    backgroundColor: COLORS.darkPurple,
+    borderColor: COLORS.darkPurple,
+  },
   outlinePillText: {
     fontSize: 11,
     fontWeight: '600',
     color: COLORS.textPrimary,
+  },
+  savedPillTextActive: {
+    color: COLORS.white,
   },
 });
