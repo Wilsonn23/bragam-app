@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS pois (
     cooldown_seconds INTEGER NOT NULL DEFAULT 60 CHECK (cooldown_seconds >= 0),
     description TEXT,
     history TEXT,
+    image_url TEXT,
     audio_guide_url VARCHAR(255),
     opening_hours VARCHAR(50),
     time_category VARCHAR(100),
@@ -67,6 +68,32 @@ CREATE TABLE IF NOT EXISTS pois (
     notification_body TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE pois
+ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+CREATE TABLE IF NOT EXISTS poi_images (
+    id BIGSERIAL PRIMARY KEY,
+    poi_id VARCHAR(10) NOT NULL REFERENCES pois(id) ON DELETE CASCADE,
+    image_url TEXT NOT NULL CHECK (image_url ~* '^https?://'),
+    alt_text VARCHAR(200),
+    sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_poi_images_poi_order
+ON poi_images (poi_id, sort_order, id);
+
+INSERT INTO poi_images (poi_id, image_url, sort_order)
+SELECT p.id, p.image_url, 0
+FROM pois p
+WHERE p.image_url IS NOT NULL
+  AND p.image_url ~* '^https?://'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM poi_images pi
+    WHERE pi.poi_id = p.id AND pi.image_url = p.image_url
+  );
 
 UPDATE pois
 SET location = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)

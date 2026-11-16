@@ -3,8 +3,9 @@ const cors = require('cors');
 const { Pool } = require('pg');
 const swaggerUi = require('swagger-ui-express');
 const usersRouter = require('./routes/users');
+const authRouter = require('./routes/auth');
+const poisRouter = require('./routes/pois');
 const openapiSpec = require('./openapi');
-const { toPoiResponse } = require('./poiResponse');
 require('dotenv').config();
 
 function createApp(pool) {
@@ -27,55 +28,9 @@ function createApp(pool) {
     });
   });
 
-  app.get('/api/pois', async (req, res, next) => {
-    try {
-      const { rows } = await pool.query(`
-        SELECT id, name, category, latitude, longitude, radius_meters,
-               description, notification_title, notification_body, cooldown_seconds, audio_guide_url
-        FROM pois
-        ORDER BY id
-      `);
-      res.json(rows.map(toPoiResponse));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get('/api/pois/nearby', async (req, res, next) => {
-    const latitude = Number(req.query.latitude);
-    const longitude = Number(req.query.longitude);
-    const maxRadius = Number(req.query.maxRadius || 15);
-
-    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
-        !Number.isFinite(longitude) || longitude < -180 || longitude > 180 ||
-        !Number.isFinite(maxRadius) || maxRadius <= 0) {
-      return res.status(400).json({ error: 'latitude, longitude, dan maxRadius harus valid.' });
-    }
-
-    try {
-      const { rows } = await pool.query(`
-        SELECT id, name, category, latitude, longitude, radius_meters,
-               description, notification_title, notification_body, cooldown_seconds, audio_guide_url,
-               ST_Distance(
-                 location::geography,
-                 ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
-               ) AS distance_meters
-        FROM pois
-        WHERE ST_DWithin(
-          location::geography,
-          ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
-          LEAST(radius_meters, $3)
-        )
-        ORDER BY distance_meters ASC, id ASC
-        LIMIT 1
-      `, [latitude, longitude, maxRadius]);
-      res.json(rows.length ? toPoiResponse(rows[0]) : null);
-    } catch (error) {
-      next(error);
-    }
-  });
-
+  app.use('/api', poisRouter);
   app.use('/api/users', usersRouter);
+  app.use('/api/auth', authRouter);
 
   app.use((error, req, res, next) => {
     console.error('Database request failed:', error.code || 'unknown');

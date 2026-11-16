@@ -6,6 +6,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import ExploreScreen from './src/screens/ExploreScreen';
 import TripScreen from './src/screens/TripScreen';
 import AccountScreen from './src/screens/AccountScreen';
+import LoginScreen from './src/screens/LoginScreen';
 import { router, usePathname } from 'expo-router';
 import { usePois } from './src/poi/PoiProvider';
 import { openPoiDetail } from './src/poi/notification';
@@ -15,8 +16,11 @@ import { ActionButton } from './src/components/ActionButton';
 import NavigationScreen from './src/screens/NavigationScreen';
 import TripRouteSummaryScreen from './src/screens/TripRouteSummaryScreen';
 import { COLORS } from './src/components/theme';
+import { BRAGA_ZONE_POLYGON } from './src/constants/bragaMapData';
+import { isPointInPolygon, validCoordinate } from './src/location/distance';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState('Home');
   const data = usePois();
   const active = useAppActive();
@@ -38,8 +42,9 @@ export default function App() {
     dismiss();
     openPoiDetail(poiId, target => router.push(target));
   };
+  const outsideBraga = validCoordinate(sample) && !isPointInPolygon(sample, BRAGA_ZONE_POLYGON);
   const hasLocationFeedback = data.status === 'loading' || data.status === 'empty' || data.error ||
-    gps.loading || gps.error;
+    gps.loading || gps.error || outsideBraga;
   const locationFeedback = hasLocationFeedback ? <View style={{ gap: 8, padding: 16 }}>
     {data.status === 'loading' && <ActivityIndicator accessibilityLabel="Memuat destinasi" color={COLORS.darkPurple} />}
     {data.error && <Text accessibilityLiveRegion="polite">{data.error}</Text>}
@@ -47,6 +52,7 @@ export default function App() {
     {data.status === 'empty' && <><Text>Belum ada destinasi tersedia.</Text><ActionButton label="Muat ulang destinasi" onPress={data.retry} /></>}
     {gps.loading && <Text>Membaca lokasi…</Text>}
     {gps.error && <><Text accessibilityLiveRegion="polite">{gps.error}</Text><ActionButton label="Coba GPS lagi" onPress={gps.retry} /></>}
+    {outsideBraga && <Text accessibilityLiveRegion="polite">Kamu sedang berada di luar area Braga.</Text>}
   </View> : null;
 
   const handleOpenDirections = (poi) => {
@@ -65,6 +71,16 @@ export default function App() {
     setSubScreen(null);
     setActiveTab(tab);
   };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setSubScreen(null);
+    setActiveTab('Home');
+  };
+
+  if (!currentUser) {
+    return <LoginScreen onLogin={setCurrentUser} />;
+  }
 
   const renderContent = () => {
     if (subScreen === 'Navigation') {
@@ -108,7 +124,7 @@ export default function App() {
       case 'Trip':
         return <TripScreen onUseTrip={handleUseTrip} />;
       case 'Account':
-        return <AccountScreen />;
+        return <AccountScreen user={currentUser} onLogout={handleLogout} />;
       default:
         return <HomeScreen pois={data.records} onOpenDetail={handleOpenDetail} onOpenDirections={handleOpenDirections} onUseTrip={handleUseTrip} />;
     }

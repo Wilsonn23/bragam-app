@@ -6,21 +6,19 @@ import {
   ScrollView,
   StyleSheet,
   SafeAreaView,
-  Image,
 } from 'react-native';
 import {
   Ionicons,
   MaterialCommunityIcons,
 } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
-import { WireframeImageBox } from '../components/PoiCardComponents';
+import PoiImageGallery from '../components/PoiImageGallery';
 import { detailContent } from '../poi/detail';
 
 const DETAIL_TABS = ['Overview', 'Menu', 'Review', 'About'];
 
 export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audio = undefined }) {
   const [activeTab, setActiveTab] = useState('Overview');
-  const [failedImage, setFailedImage] = useState(null);
 
   const placeName = poi.name;
   const distance = poi.distance;
@@ -129,15 +127,9 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audio =
           </TouchableOpacity>
         </View>
 
-        {/* Asymmetric 3-Box Wireframe Gallery */}
+        {/* POI image gallery */}
         <View style={styles.galleryGrid}>
-          {poi.imageUrl && failedImage !== poi.imageUrl ?
-            <Image source={{ uri: poi.imageUrl }} accessibilityLabel={`Foto ${placeName}`} style={[styles.leftLargeBox, { height: 232, borderRadius: RADIUS.md }]} onError={() => setFailedImage(poi.imageUrl)} /> :
-            <WireframeImageBox style={styles.leftLargeBox} height={232} />}
-          <View style={styles.rightStackedCol}>
-            <WireframeImageBox width="100%" height={111} />
-            <WireframeImageBox width="100%" height={111} />
-          </View>
+          <PoiImageGallery poi={poi} />
         </View>
 
         {/* Tabs Bar */}
@@ -316,7 +308,7 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   galleryGrid: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     paddingHorizontal: 20,
     marginTop: 14,
     gap: 10,

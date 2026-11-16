@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
-import { WireframeImageBox, PoiDetailFooter } from '../components/PoiCardComponents';
+import { PoiDetailFooter } from '../components/PoiCardComponents';
+import { PoiFirstImage } from '../components/PoiImageGallery';
 
 const TRIP_STOPS = [
   { id: '1', time: '09.00', distance: '2km', name: 'Sweet Cantina' },
@@ -170,7 +171,7 @@ export default function HomeScreen({
             Coba Kunjungi Rekomendasi Destinasi Braga!
           </Text>
 
-          <WireframeImageBox height={145} />
+          {recommended ? <PoiFirstImage poi={recommended} style={styles.recommendationImage} /> : null}
 
           {recommended ? <PoiDetailFooter
             name={recommended.name}
@@ -198,6 +199,12 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: COLORS.primaryPurple,
+  },
+  recommendationImage: {
+    width: '100%',
+    height: 145,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.lavenderTint,
   },
   headerArea: {
     backgroundColor: COLORS.darkPurple,

@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { distanceMeters } = require('../src/location/distance');
+const { distanceMeters, isPointInPolygon } = require('../src/location/distance');
 const { adaptPois } = require('../src/poi/adapter');
 const { GeofenceController } = require('../src/location/geofence');
 const { testPois } = require('./fixtures/pois');
@@ -14,6 +14,17 @@ test('Haversine returns meters, symmetric, zero, antipodal, invalid', () => {
   assert.equal(distanceMeters(poi,testPois[1]),distanceMeters(testPois[1],poi));
   assert.ok(Math.abs(distanceMeters({latitude:0,longitude:0},{latitude:0,longitude:180})-20015086.8)<1);
   assert.ok(Number.isNaN(distanceMeters(null,poi)));
+});
+
+test('point-in-polygon identifies locations inside and outside Braga', () => {
+  const polygon = [
+    { latitude: 0, longitude: 0 },
+    { latitude: 0, longitude: 2 },
+    { latitude: 2, longitude: 2 },
+    { latitude: 2, longitude: 0 },
+  ];
+  assert.equal(isPointInPolygon({ latitude: 1, longitude: 1 }, polygon), true);
+  assert.equal(isPointInPolygon({ latitude: 3, longitude: 1 }, polygon), false);
 });
 test('outside does not trigger; entry emits once, closing does not rearm', () => {
   const c = new GeofenceController([poi]);

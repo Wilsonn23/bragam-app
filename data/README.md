@@ -62,6 +62,7 @@ CREATE TABLE pois (
     cooldown_seconds INT DEFAULT 60,
     description TEXT,
     history TEXT,
+    image_url TEXT,
     audio_guide_url VARCHAR(255),
     opening_hours VARCHAR(50),
     time_category VARCHAR(100),
@@ -104,6 +105,14 @@ npm start
 ```
 
 Jika tabel sudah pernah dibuat sebelum schema terbaru, jalankan `psql "$DATABASE_URL" -f schema.sql` lagi sebelum import CSV. Trigger akan mengisi `location` dari `latitude` dan `longitude`.
+
+Kolom `image_url` menyimpan URL gambar HTTP(S) untuk POI. Nilai yang bukan URL
+HTTP(S) tidak akan diteruskan oleh API ke mobile.
+
+Gambar tambahan disimpan di tabel `poi_images` dengan kolom `poi_id`,
+`image_url`, `alt_text`, dan `sort_order`. Satu POI dapat memiliki banyak
+gambar. Jika kolom legacy `pois.image_url` masih berisi data, menjalankan
+`schema.sql` akan menyalinnya satu kali ke `poi_images`.
 
 Schema tersebut juga membuat `public.users` yang terhubung ke `auth.users`. User baru dari Supabase Auth otomatis dibuatkan profil di `public.users`; password tetap dikelola Supabase Auth dan tidak disimpan di tabel aplikasi.
 

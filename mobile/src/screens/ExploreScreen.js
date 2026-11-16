@@ -9,15 +9,18 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  Platform,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polygon, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
-import { WireframeImageBox, PoiDetailFooter } from '../components/PoiCardComponents';
+import { PoiDetailFooter } from '../components/PoiCardComponents';
+import PoiImageGallery from '../components/PoiImageGallery';
 import { validCoordinate } from '../location/distance';
 import SearchPoiOverlay from '../components/SearchPoiOverlay';
 import {
   BRAGA_REGION,
+  BRAGA_ZONE_POLYGON,
   BRAGA_PURPLE_MAP_STYLE,
 } from '../constants/bragaMapData';
 
@@ -83,7 +86,7 @@ export default function ExploreScreen({
       <View style={styles.mapCanvas}>
         <MapView
           ref={mapRef}
-          provider={PROVIDER_GOOGLE}
+          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           style={StyleSheet.absoluteFill}
           initialRegion={BRAGA_REGION}
           customMapStyle={BRAGA_PURPLE_MAP_STYLE}
@@ -91,6 +94,12 @@ export default function ExploreScreen({
           showsMyLocationButton={false}
           showsCompass={false}
         >
+          <Polygon
+            coordinates={BRAGA_ZONE_POLYGON}
+            fillColor="rgba(91, 43, 191, 0.12)"
+            strokeColor={COLORS.primaryPurple}
+            strokeWidth={3}
+          />
           {validCoordinate(sample) &&
             <Marker coordinate={{ latitude: sample.latitude, longitude: sample.longitude }} title="Posisi pengguna" pinColor={COLORS.primaryPurple} />}
           {pois.map((poi) => (
@@ -255,9 +264,7 @@ export default function ExploreScreen({
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.carouselRow}
               >
-                <WireframeImageBox width={105} height={105} />
-                <WireframeImageBox width={105} height={105} />
-                <WireframeImageBox width={105} height={105} />
+                <PoiImageGallery poi={poi} compact />
               </ScrollView>
 
               <View style={{ paddingHorizontal: 20 }}>

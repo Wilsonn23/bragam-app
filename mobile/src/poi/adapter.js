@@ -21,6 +21,10 @@ function adaptPois(input) {
       notificationTitle: text(p.notificationTitle ?? p.notification_title),
       notificationBody: text(p.notificationBody ?? p.notification_body),
       imageUrl: typeof p.imageUrl === 'string' && /^https?:\/\//.test(p.imageUrl) ? p.imageUrl : undefined,
+      ...(Array.isArray(p.images) ? {
+        images: p.images.filter(image => image && typeof image.imageUrl === 'string' &&
+          /^https?:\/\//i.test(image.imageUrl)),
+      } : {}),
       audioUrl: p.audioUrl ?? p.audioGuideUrl ?? p.audio_guide_url,
     };
   }).filter(p => ['id', 'name', 'category'].every(k => text(p[k])) && validCoordinate(p) &&

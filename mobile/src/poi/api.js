@@ -10,4 +10,35 @@ async function fetchPois({ signal, fetchImpl = fetch, baseUrl = API_BASE_URL } =
   if (records.length !== rows.length) throw new Error('Data destinasi memuat baris tidak valid atau ID duplikat.');
   return records;
 }
-module.exports = { fetchPois };
+
+async function fetchPoiImages(id) {
+  const response = await fetch(`${API_BASE_URL}/api/pois/${encodeURIComponent(id)}/images`);
+  if (!response.ok) throw new Error(`Gagal mengambil gambar POI (${response.status}).`);
+  const data = await response.json();
+  return Array.isArray(data) ? data : [];
+}
+
+async function loginUser(email, password) {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Login gagal (${response.status}).`);
+  if (!data.user) throw new Error('Response login tidak valid.');
+  return data.user;
+}
+
+async function registerUser(name, email, password) {
+  const response = await fetch(`${API_BASE_URL}/api/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, password }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Registrasi gagal (${response.status}).`);
+  return data;
+}
+
+module.exports = { fetchPois, fetchPoiImages, loginUser, registerUser };

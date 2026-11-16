@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { COLORS, RADIUS } from './theme';
+import { PoiFirstImage } from './PoiImageGallery';
 
 export default function SearchPoiOverlay({ visible, onClose, onSelectPoi, pois }) {
   const [query, setQuery] = useState('');
@@ -110,6 +111,8 @@ export default function SearchPoiOverlay({ visible, onClose, onSelectPoi, pois }
                   <Text style={styles.distText}>{item.distance}</Text>
                 </View>
 
+                <PoiFirstImage poi={item} style={styles.resultImage} />
+
                 <View style={styles.textCol}>
                   <Text style={styles.placeName}>{item.name}</Text>
                   <Text style={styles.placeAddress} numberOfLines={1}>
@@ -132,6 +135,13 @@ export default function SearchPoiOverlay({ visible, onClose, onSelectPoi, pois }
 }
 
 const styles = StyleSheet.create({
+  resultImage: {
+    width: 52,
+    height: 52,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.lavenderTint,
+    marginRight: 10,
+  },
   overlayRoot: {
     ...StyleSheet.absoluteFill,
     zIndex: 50,

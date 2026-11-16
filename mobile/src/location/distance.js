@@ -14,4 +14,21 @@ function distanceMeters(a, b) {
     Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(rad(b.longitude - a.longitude) / 2) ** 2;
   return 6371000 * 2 * Math.asin(Math.sqrt(Math.min(1, Math.max(0, h))));
 }
-module.exports = { distanceMeters, validCoordinate };
+/** @param {Coordinate} point @param {Coordinate[]} polygon */
+function isPointInPolygon(point, polygon) {
+  if (!validCoordinate(point) || !Array.isArray(polygon) || polygon.length < 3) return false;
+  let inside = false;
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {
+    const current = polygon[index];
+    const prior = polygon[previous];
+    if (!validCoordinate(current) || !validCoordinate(prior)) return false;
+    const crossesLatitude = (current.latitude > point.latitude) !== (prior.latitude > point.latitude);
+    if (crossesLatitude) {
+      const longitudeAtPoint = (prior.longitude - current.longitude) *
+        (point.latitude - current.latitude) / (prior.latitude - current.latitude) + current.longitude;
+      if (point.longitude < longitudeAtPoint) inside = !inside;
+    }
+  }
+  return inside;
+}
+module.exports = { distanceMeters, isPointInPolygon, validCoordinate };
