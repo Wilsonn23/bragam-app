@@ -7,12 +7,16 @@ import { WireframeImageBox } from '../components/PoiCardComponents';
 import { getOperatingStatus, getPoiDetailFields, getPoiGalleryImages, getRatingStars } from '../poi/presentation';
 import { useAppActive, useForegroundLocation } from '../hooks/useForegroundLocation';
 import { distanceMeters } from '../location/distance';
+import { useGuideAudio } from '../audio/AudioProvider';
 
 const DETAIL_TABS = ['Overview', 'Menu', 'Review', 'About'];
 
-export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audioControl }) {
+export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audioControl = undefined, isSaved = false, onToggleSave = undefined, onAddToItinerary = undefined }) {
   const appActive = useAppActive();
   const { sample } = useForegroundLocation(appActive);
+  const audio = useGuideAudio();
+  const audioUrl = typeof poi.audioUrl === 'string' && /^https:\/\//i.test(poi.audioUrl) ? poi.audioUrl : null;
+  const playing = audio.currentId === poi.id && audio.status.playing;
   const [activeTab, setActiveTab] = useState('Overview');
   const [failedImages, setFailedImages] = useState([]);
   const [now, setNow] = useState(() => Date.now());
@@ -50,7 +54,11 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audioCo
               ))}
             </View>
           </View>
-          {audioControl}
+          {audioControl || <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: !audioUrl }}
+            disabled={!audioUrl} onPress={() => audio.toggle({ ...poi, audioUrl })} style={[styles.audioBtn, !audioUrl && styles.disabled]}>
+            <Text style={styles.audioBtnText}>{playing ? 'Jeda audio' : 'Nyalakan audio'}</Text>
+            <Ionicons name={playing ? 'pause' : 'volume-high'} size={15} color={COLORS.white} style={{ marginLeft: 4 }} />
+          </TouchableOpacity>}
         </View>
         <View style={styles.actionRow}>
           <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: !onOpenDirections }} disabled={!onOpenDirections}
@@ -58,10 +66,12 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audioCo
             <Text style={styles.outlinePillText}>Directions</Text>
             <MaterialCommunityIcons name="directions" size={17} color={COLORS.darkPurple} style={{ marginLeft: 5 }} />
           </TouchableOpacity>
-          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: true }} disabled style={[styles.outlinePillBtn, styles.disabled]}>
-            <Text style={styles.outlinePillText}>Save</Text><Ionicons name="bookmark" size={15} color={COLORS.darkPurple} style={{ marginLeft: 5 }} />
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: !onToggleSave }} disabled={!onToggleSave}
+            onPress={() => onToggleSave?.(poi)} style={[styles.outlinePillBtn, isSaved && styles.savedPillBtnActive, !onToggleSave && styles.disabled]}>
+            <Text style={[styles.outlinePillText, isSaved && styles.savedPillTextActive]}>{isSaved ? 'Saved' : 'Save'}</Text><Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={15} color={isSaved ? COLORS.white : COLORS.darkPurple} style={{ marginLeft: 5 }} />
           </TouchableOpacity>
-          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: true }} disabled style={[styles.outlinePillBtn, styles.disabled]}>
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: !onAddToItinerary }} disabled={!onAddToItinerary}
+            onPress={() => onAddToItinerary?.(poi)} style={[styles.outlinePillBtn, !onAddToItinerary && styles.disabled]}>
             <Text style={styles.outlinePillText}>Add to Itinerary</Text><Ionicons name="add-circle-outline" size={17} color={COLORS.darkPurple} style={{ marginLeft: 4 }} />
           </TouchableOpacity>
         </View>
@@ -212,6 +222,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textPrimary,
   },
+  savedPillBtnActive: { backgroundColor: COLORS.darkPurple, borderColor: COLORS.darkPurple },
+  savedPillTextActive: { color: COLORS.white },
   galleryGrid: {
     flexDirection: 'row',
     paddingHorizontal: 20,

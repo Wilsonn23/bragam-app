@@ -10,6 +10,7 @@ import {
   PanResponder,
   Dimensions,
   Platform,
+  Alert,
 } from 'react-native';
 import MapView, {
   Marker,
@@ -17,6 +18,7 @@ import MapView, {
   Polyline,
   PROVIDER_GOOGLE,
 } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 import { WireframeImageBox, PoiDetailFooter } from '../components/PoiCardComponents';
@@ -27,6 +29,7 @@ import {
   BRAGA_ZONE_POLYGON,
   BRAGA_GRAY_MAP_STYLE,
 } from '../constants/bragaMapData';
+import { useAppActive, useForegroundLocation } from '../hooks/useForegroundLocation';
 
 // Sesuaikan IP komputer & PORT dengan yang ada di backend/.env
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000';
@@ -57,6 +60,27 @@ const RATING_OPTIONS = [
   { label: '4+ ★', value: '4' },
 ];
 
+// Mengecek apakah titik GPS pengguna berada di dalam poligon ungu Jl. Braga (Ray-Casting)
+function isPointInPolygon(point, polygon) {
+  if (!point || !Array.isArray(polygon) || polygon.length < 3) return false;
+  const { latitude: x, longitude: y } = point;
+  let inside = false;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].latitude;
+    const yi = polygon[i].longitude;
+    const xj = polygon[j].latitude;
+    const yj = polygon[j].longitude;
+
+    const intersect =
+      yi > y !== yj > y &&
+      x < ((xj - xi) * (y - yi)) / (yj - yi + Number.EPSILON) + xi;
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+}
+
 function normalizePoiItem(item) {
   const localMeta = BRAGA_POIS.find((b) => b.id === item.id);
   const lat = Number(
@@ -83,14 +107,86 @@ function normalizePoiItem(item) {
 export default function ExploreScreen({
   windowShrink = 0,
   pois = [],
+  bookmarkedPois = [],
   onOpenDetail,
   onOpenDirections,
+  onOpenBookmarks,
+  onToggleSave,
+  onAddToItinerary,
   onSimulateGeofence,
 }) {
   const mapRef = useRef(null);
   const [activeSegment, setActiveSegment] = useState('nearby'); // 'nearby' | 'recommendation'
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // State koordinat GPS dari MapView / expo-location sebagai cadangan cepat
+  const [mapUserCoord, setMapUserCoord] = useState(null);
+
+  // Baca GPS perangkat melalui hook foreground
+  const isAppActive = useAppActive();
+  const locationState = useForegroundLocation(isAppActive);
+  const hookCoords =
+    locationState?.sample ||
+    locationState?.location?.coords ||
+    locationState?.coords ||
+    locationState?.location ||
+    locationState;
+
+  // Ambil posisi terakhir / posisi cepat saat layar dibuka agar tidak menunggu lama
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted' || !isMounted) return;
+
+        const lastKnown = await Location.getLastKnownPositionAsync();
+        if (lastKnown?.coords && isMounted) {
+          setMapUserCoord({
+            latitude: lastKnown.coords.latitude,
+            longitude: lastKnown.coords.longitude,
+          });
+        }
+
+        const current = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (current?.coords && isMounted) {
+          setMapUserCoord({
+            latitude: current.coords.latitude,
+            longitude: current.coords.longitude,
+          });
+        }
+      } catch (_) {}
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Gabungkan sumber koordinat terbaik (hook -> MapView -> expo-location)
+  const resolvedUserCoord = useMemo(() => {
+    const hLat = Number(hookCoords?.latitude);
+    const hLng = Number(hookCoords?.longitude);
+    if (Number.isFinite(hLat) && Number.isFinite(hLng)) {
+      return { latitude: hLat, longitude: hLng };
+    }
+    if (
+      mapUserCoord &&
+      Number.isFinite(mapUserCoord.latitude) &&
+      Number.isFinite(mapUserCoord.longitude)
+    ) {
+      return mapUserCoord;
+    }
+    return null;
+  }, [hookCoords?.latitude, hookCoords?.longitude, mapUserCoord]);
+
+  const isOutsideBragaZone = useMemo(() => {
+    if (!resolvedUserCoord) return false;
+    return !isPointInPolygon(resolvedUserCoord, BRAGA_ZONE_POLYGON);
+  }, [resolvedUserCoord]);
 
   // State 4 Dropdown Filter pada Bottom Sheet
   const [categoryOptions, setCategoryOptions] = useState([
@@ -145,6 +241,17 @@ export default function ExploreScreen({
 
   const handleRecenterBraga = () => {
     mapRef.current?.animateToRegion(BRAGA_REGION, 600);
+  };
+
+  const handlePressAddItinerary = (poi) => {
+    if (onAddToItinerary) {
+      onAddToItinerary(poi);
+    } else {
+      Alert.alert(
+        'Ditambahkan ke Itinerary',
+        `${poi.name} berhasil ditambahkan ke rencana perjalananmu.`
+      );
+    }
   };
 
   const animateSheet = (toExpanded) => {
@@ -271,6 +378,19 @@ export default function ExploreScreen({
           showsUserLocation={true}
           showsMyLocationButton={false}
           showsCompass={false}
+          onUserLocationChange={(event) => {
+            const coord = event?.nativeEvent?.coordinate;
+            if (
+              coord &&
+              Number.isFinite(coord.latitude) &&
+              Number.isFinite(coord.longitude)
+            ) {
+              setMapUserCoord({
+                latitude: coord.latitude,
+                longitude: coord.longitude,
+              });
+            }
+          }}
         >
           {/* Highlight Blok Ungu Transparan Khusus Koridor Jl. Braga */}
           <Polygon
@@ -287,7 +407,7 @@ export default function ExploreScreen({
             lineDashPattern={[10, 8]}
           />
 
-          {/* Marker POI di Jl. Braga */}
+          {/* Marker POI di Jl. Braga (ditekan langsung membuka Detail POI) */}
           {displayPois.map((poi) => {
             const lat = Number(
               poi.coordinate?.latitude ?? poi.latitude ?? poi.lat
@@ -302,17 +422,7 @@ export default function ExploreScreen({
               <Marker
                 key={String(poi.id)}
                 coordinate={{ latitude: lat, longitude: lng }}
-                onPress={() => {
-                  mapRef.current?.animateToRegion(
-                    {
-                      latitude: lat,
-                      longitude: lng,
-                      latitudeDelta: 0.004,
-                      longitudeDelta: 0.004,
-                    },
-                    400
-                  );
-                }}
+                onPress={() => onOpenDetail?.(poi)}
               >
                 <View style={styles.customMarkerRow}>
                   <View style={styles.teardropPin}>
@@ -327,24 +437,44 @@ export default function ExploreScreen({
           })}
         </MapView>
 
-        {/* Top Floating Buttons: Tombol Pencarian & Bookmark */}
-        <SafeAreaView style={styles.topOverlay}>
-          <View style={styles.topActionRow}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => setIsSearchOpen(true)}
-              style={styles.circleActionBtn}
-            >
-              <Ionicons name="search" size={20} color={COLORS.darkPurple} />
-            </TouchableOpacity>
+        {/* Top Floating Bar: Bubble Info Luar Zona + Tombol Search & Bookmark */}
+        <SafeAreaView style={styles.topOverlay} pointerEvents="box-none">
+          <View style={styles.topActionRow} pointerEvents="box-none">
+            {isOutsideBragaZone && (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={handleRecenterBraga}
+                style={styles.outsideZoneBubble}
+              >
+                <Ionicons
+                  name="information-circle"
+                  size={18}
+                  color={COLORS.darkPurple}
+                />
+                <Text style={styles.outsideZoneText} numberOfLines={2}>
+                  Kamu berada di luar area Jl. Braga
+                </Text>
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onLongPress={onSimulateGeofence}
-              style={styles.circleActionBtn}
-            >
-              <Ionicons name="bookmark" size={20} color={COLORS.darkPurple} />
-            </TouchableOpacity>
+            <View style={styles.rightButtonsGroup}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => setIsSearchOpen(true)}
+                style={styles.circleActionBtn}
+              >
+                <Ionicons name="search" size={20} color={COLORS.darkPurple} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={onOpenBookmarks}
+                onLongPress={onSimulateGeofence}
+                style={styles.circleActionBtn}
+              >
+                <Ionicons name="bookmark" size={20} color={COLORS.darkPurple} />
+              </TouchableOpacity>
+            </View>
           </View>
         </SafeAreaView>
       </View>
@@ -464,36 +594,47 @@ export default function ExploreScreen({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.cardsScrollContent}
         >
-          {displayPois.map((poi, idx) => (
-            <View
-              key={`${activeSegment}-${poi.id}`}
-              style={[
-                styles.poiCardSection,
-                idx !== displayPois.length - 1 && styles.poiCardDivider,
-              ]}
-            >
-              <ScrollView
-                horizontal
-                nestedScrollEnabled={true}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.carouselRow}
-              >
-                <WireframeImageBox width={105} height={105} />
-                <WireframeImageBox width={105} height={105} />
-                <WireframeImageBox width={105} height={105} />
-              </ScrollView>
+          {displayPois.map((poi, idx) => {
+            const isPoiSaved = bookmarkedPois.some(
+              (item) =>
+                (poi.id && String(item.id) === String(poi.id)) ||
+                item.name?.toLowerCase() === poi.name?.toLowerCase()
+            );
 
-              <View style={{ paddingHorizontal: 20 }}>
-                <PoiDetailFooter
-                  name={poi.name}
-                  distance={poi.distance || `${poi.triggerRadiusMeters || 10}m`}
-                  rating={poi.rating}
-                  onCheckDetail={() => onOpenDetail?.(poi)}
-                  onDirections={() => onOpenDirections?.(poi)}
-                />
+            return (
+              <View
+                key={`${activeSegment}-${poi.id}`}
+                style={[
+                  styles.poiCardSection,
+                  idx !== displayPois.length - 1 && styles.poiCardDivider,
+                ]}
+              >
+                <ScrollView
+                  horizontal
+                  nestedScrollEnabled={true}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.carouselRow}
+                >
+                  <WireframeImageBox width={105} height={105} />
+                  <WireframeImageBox width={105} height={105} />
+                  <WireframeImageBox width={105} height={105} />
+                </ScrollView>
+
+                <View style={{ paddingHorizontal: 20 }}>
+                  <PoiDetailFooter
+                    name={poi.name}
+                    distance={poi.distance || `${poi.triggerRadiusMeters || 10}m`}
+                    rating={poi.rating}
+                    isSaved={isPoiSaved}
+                    onCheckDetail={() => onOpenDetail?.(poi)}
+                    onDirections={() => onOpenDirections?.(poi)}
+                    onSave={() => onToggleSave?.(poi)}
+                    onAddToItinerary={() => handlePressAddItinerary(poi)}
+                  />
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </ScrollView>
       </Animated.View>
 
@@ -572,14 +713,46 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   topOverlay: {
-    zIndex: 10,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
   },
   topActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingHorizontal: 16,
-    paddingTop: 48,
+    paddingTop: Platform.OS === 'android' ? 44 : 12,
+    gap: 10,
+  },
+  outsideZoneBubble: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 2,
+    borderColor: COLORS.primaryPurple,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.14,
+    shadowRadius: 4,
+  },
+  outsideZoneText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.darkPurple,
+  },
+  rightButtonsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
   },
   circleActionBtn: {
@@ -591,7 +764,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primaryPurple,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 3,
+    elevation: 4,
   },
   customMarkerRow: {
     flexDirection: 'row',
