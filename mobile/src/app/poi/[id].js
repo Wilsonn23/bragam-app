@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -6,23 +6,51 @@ import { ActionButton } from '../../components/ActionButton';
 import { COLORS } from '../../components/theme';
 import { useGuideAudio } from '../../audio/AudioProvider';
 import { findPoi } from '../../poi/detail';
+import { fetchPoi } from '../../poi/api';
 
 const fixtures = __DEV__ ? require('../../dev/fixtures').testPois : null;
 const text = value => typeof value === 'string' && value.trim() ? value : null;
 
 export default function PoiDetail() {
   const { id, simulation } = useLocalSearchParams();
-  const poi = findPoi(id, __DEV__ && simulation === '1' ? fixtures : undefined);
+  const [poi, setPoi] = useState(null);
+  const [error, setError] = useState(null);
   const audio = useGuideAudio();
   const [failedImage, setFailedImage] = useState(null);
   const back = () => router.canGoBack() ? router.back() : router.replace('/');
-  if (!poi) return <SafeAreaView style={styles.page}><View style={styles.content}>
-    <Text accessibilityRole="header" style={styles.title}>Destinasi tidak ditemukan</Text>
-    <Text style={styles.body}>Data destinasi tidak tersedia.</Text>
+
+  useEffect(() => {
+    let active = true;
+    const loadPoi = async () => {
+      try {
+        const data = __DEV__ && simulation === '1'
+          ? findPoi(id, fixtures)
+          : await fetchPoi(id);
+        if (!data) throw new Error('Data destinasi tidak ditemukan.');
+        if (active) setPoi(data);
+      } catch (loadError) {
+        if (active) setError(loadError);
+      }
+    };
+    loadPoi();
+    return () => {
+      active = false;
+    };
+  }, [id, simulation]);
+
+  if (error) return <SafeAreaView style={styles.page}><View style={styles.content}>
+    <Text accessibilityRole="header" style={styles.title}>Gagal memuat destinasi</Text>
+    <Text style={styles.body}>{error.message}</Text>
     <ActionButton label="Kembali" onPress={back} />
   </View></SafeAreaView>;
+  if (!poi) return <SafeAreaView style={styles.page}><View style={styles.content}>
+    <Text accessibilityRole="header" style={styles.title}>Memuat destinasi...</Text>
+  </View></SafeAreaView>;
   const active = audio.currentId === poi.id;
-  const audioUrl = typeof poi.audioUrl === 'string' && /^https:\/\//i.test(poi.audioUrl) ? poi.audioUrl : null;
+  const audioUrl = typeof (poi.audioGuideUrl || poi.audioUrl) === 'string' &&
+    /^https:\/\//i.test(poi.audioGuideUrl || poi.audioUrl)
+    ? poi.audioGuideUrl || poi.audioUrl
+    : null;
   return <SafeAreaView style={styles.page}><ScrollView contentContainerStyle={styles.content}>
     <ActionButton secondary label="Kembali" onPress={back} />
     {poi.imageUrl && failedImage !== poi.imageUrl ? <Image source={{ uri: poi.imageUrl }} style={styles.image}

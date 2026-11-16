@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,8 @@ import {
   MaterialCommunityIcons,
 } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
-import { WireframeImageBox } from '../components/PoiCardComponents';
+import PoiImageGallery from '../components/PoiImageGallery';
+import { fetchPoiImages } from '../poi/api';
 
 const DETAIL_TABS = ['Overview', 'Menu', 'Review', 'About'];
 
@@ -27,16 +28,46 @@ export default function PoiDetailScreen({
 }) {
   const [activeTab, setActiveTab] = useState('Overview');
   const [isAudioOn, setIsAudioOn] = useState(false);
+  const [loadedImages, setLoadedImages] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    const existingImages = Array.isArray(poi?.images) ? poi.images : [];
+    if (!poi?.id || existingImages.length > 0) {
+      return () => {
+        active = false;
+      };
+    }
+
+    fetchPoiImages(poi.id)
+      .then((images) => {
+        if (active) setLoadedImages({ poiId: poi.id, images });
+      })
+      .catch((error) => {
+        console.error(`[POI] Gagal memuat gambar ${poi.id}:`, error);
+        if (active) setLoadedImages({ poiId: poi.id, images: [] });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [poi]);
 
   const placeName = poi?.name || 'Braga Citywalk';
   const distance = poi?.distance || '12km';
   const rating = poi?.rating || '5.0';
 
-  const activePoi = poi || {
+  const activePoi = {
+    ...(poi || {
     id: placeName,
     name: placeName,
     distance,
     rating,
+    }),
+    ...(loadedImages?.poiId === poi?.id ? {
+      images: loadedImages.images,
+      imageUrl: loadedImages.images[0]?.imageUrl,
+    } : {}),
   };
 
   const handlePressSave = () => {
@@ -164,13 +195,8 @@ export default function PoiDetailScreen({
           </TouchableOpacity>
         </View>
 
-        {/* Asymmetric 3-Box Wireframe Gallery */}
         <View style={styles.galleryGrid}>
-          <WireframeImageBox style={styles.leftLargeBox} height={232} />
-          <View style={styles.rightStackedCol}>
-            <WireframeImageBox width="100%" height={111} />
-            <WireframeImageBox width="100%" height={111} />
-          </View>
+          <PoiImageGallery poi={activePoi} />
         </View>
 
         {/* Tabs Bar */}
@@ -243,6 +269,21 @@ export default function PoiDetailScreen({
               />
               <Text style={styles.detailText}>
                 {poi?.website || 'http://www.bragacitywalk.co.id/'}
+              </Text>
+            </View>
+          </View>
+        ) : activeTab === 'About' ? (
+          <View style={styles.aboutList}>
+            <View style={styles.aboutSection}>
+              <Text style={styles.aboutHeading}>Description</Text>
+              <Text style={styles.aboutText}>
+                {poi?.description || poi?.shortDescription || 'Deskripsi belum tersedia.'}
+              </Text>
+            </View>
+            <View style={styles.aboutSection}>
+              <Text style={styles.aboutHeading}>History</Text>
+              <Text style={styles.aboutText}>
+                {poi?.history || 'History belum tersedia.'}
               </Text>
             </View>
           </View>
@@ -360,7 +401,7 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
   galleryGrid: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     paddingHorizontal: 20,
     marginTop: 14,
     gap: 10,
@@ -401,6 +442,25 @@ const styles = StyleSheet.create({
   },
   overviewList: {
     backgroundColor: COLORS.white,
+  },
+  aboutList: {
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 20,
+    paddingVertical: 6,
+  },
+  aboutSection: {
+    paddingVertical: 12,
+  },
+  aboutHeading: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 6,
+  },
+  aboutText: {
+    fontSize: 13,
+    color: COLORS.textPrimary,
+    lineHeight: 20,
   },
   detailRow: {
     flexDirection: 'row',
