@@ -6,6 +6,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import ExploreScreen from './src/screens/ExploreScreen';
 import TripScreen from './src/screens/TripScreen';
 import AccountScreen from './src/screens/AccountScreen';
+import LoginScreen from './src/screens/LoginScreen';
 import PoiDetailScreen from './src/screens/PoiDetailScreen';
 import NavigationScreen from './src/screens/NavigationScreen';
 import TripRouteSummaryScreen from './src/screens/TripRouteSummaryScreen';
@@ -16,6 +17,7 @@ import { useAppActive, useForegroundLocation } from './src/hooks/useForegroundLo
 import { usePoiTriggers } from './src/hooks/usePoiTriggers';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState(null);
   const { pois, loading, error } = usePois();
   const active = useAppActive();
   const gps = useForegroundLocation(active);
@@ -213,7 +215,7 @@ export default function App() {
       case 'Trip':
         return <TripScreen onUseTrip={handleUseTrip} />;
       case 'Account':
-        return <AccountScreen />;
+        return <AccountScreen user={currentUser} onLogout={() => setCurrentUser(null)} />;
       default:
         return <HomeScreen onOpenDetail={handleOpenDetail} onOpenDirections={handleOpenDirections} onUseTrip={handleUseTrip} />;
     }
@@ -225,6 +227,10 @@ export default function App() {
   const showBottomNav = subScreen !== 'PoiDetail';
   const isLightStatusBar =
     subScreen === null && (activeTab === 'Home' || activeTab === 'Account');
+
+  if (!currentUser) {
+    return <LoginScreen onLogin={setCurrentUser} />;
+  }
 
   return (
     <View onLayout={handleContainerLayout} style={styles.container}>

@@ -73,6 +73,8 @@ Contoh response `200`:
     "latitude": -6.91775,
     "longitude": 107.60912,
     "triggerRadiusMeters": 10,
+    "cooldownSeconds": 60,
+    "notificationBody": null,
     "shortDescription": "Restoran legendaris...",
     "notificationTitle": "Kuliner Legendaris Braga",
     "audioGuideUrl": null
@@ -108,6 +110,8 @@ Response jika ditemukan:
   "latitude": -6.91775,
   "longitude": 107.60912,
   "triggerRadiusMeters": 10,
+    "cooldownSeconds": 60,
+    "notificationBody": null,
   "shortDescription": "Restoran legendaris...",
   "notificationTitle": "Kuliner Legendaris Braga",
   "distanceMeters": 2.41

@@ -13,6 +13,7 @@ function toPoiResponse(row) {
     latitude: Number(row.latitude),
     longitude: Number(row.longitude),
     triggerRadiusMeters: Number(row.radius_meters),
+    ...(row.cooldown_seconds !== undefined ? { cooldownSeconds: optionalNumber(row.cooldown_seconds) ?? 60 } : {}),
     shortDescription: row.description || '',
     description: row.description || undefined,
     address: row.address || undefined,
@@ -24,6 +25,7 @@ function toPoiResponse(row) {
     rating: optionalNumber(row.rating),
     reviewsCount: optionalNumber(row.reviews_count),
     notificationTitle: row.notification_title || '',
+    notificationBody: row.notification_body === undefined ? null : row.notification_body,
     audioGuideUrl: row.audio_guide_url || undefined,
     distanceMeters: optionalNumber(row.distance_meters),
   };
