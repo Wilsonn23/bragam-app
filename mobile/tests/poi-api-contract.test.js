@@ -1,6 +1,15 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { toPoiResponse } = require('../../backend/poiResponse');
+
+test('backend carries a verified address through to the POI detail fields', () => {
+  const { getPoiDetailFields } = require('../src/poi/presentation');
+  const poi = toPoiResponse({ id: 'P01', name: 'Maison Bogerijen', category: 'Kuliner',
+    latitude: -6.91775, longitude: 107.60912, radius_meters: 10,
+    description: 'Destinasi', address: 'Jl. Braga No. 58' });
+  assert.equal(getPoiDetailFields(poi).address, 'Jl. Braga No. 58');
+  assert.equal(toPoiResponse({}).address, undefined);
+});
 const { adaptPois } = require('../src/poi/adapter');
 
 test('database record supplies matching POI detail and audio fields to mobile', () => {

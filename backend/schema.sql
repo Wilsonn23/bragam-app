@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS pois (
     radius_meters INTEGER NOT NULL DEFAULT 10 CHECK (radius_meters > 0),
     cooldown_seconds INTEGER NOT NULL DEFAULT 300 CHECK (cooldown_seconds >= 0),
     description TEXT,
+    address TEXT,
     history TEXT,
     audio_guide_url VARCHAR(255),
     opening_hours VARCHAR(50),

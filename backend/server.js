@@ -35,7 +35,7 @@ app.get('/api/pois', async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
-             description, history, opening_hours, menu_highlights, price_min, price_max,
+             description, to_jsonb(pois)->>'address' AS address, history, opening_hours, menu_highlights, price_min, price_max,
              rating, reviews_count, notification_title, audio_guide_url
       FROM pois
       ORDER BY id
@@ -147,7 +147,7 @@ app.get('/api/pois/nearby', async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
-             description, history, opening_hours, menu_highlights, price_min, price_max,
+             description, to_jsonb(pois)->>'address' AS address, history, opening_hours, menu_highlights, price_min, price_max,
              rating, reviews_count, notification_title, audio_guide_url,
              ST_Distance(
                location::geography,

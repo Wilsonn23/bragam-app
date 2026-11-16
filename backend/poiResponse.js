@@ -15,6 +15,7 @@ function toPoiResponse(row) {
     triggerRadiusMeters: Number(row.radius_meters),
     shortDescription: row.description || '',
     description: row.description || undefined,
+    address: row.address || undefined,
     history: row.history || undefined,
     openingHours: row.opening_hours || undefined,
     menuHighlights: row.menu_highlights || undefined,
