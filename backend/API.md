@@ -62,6 +62,16 @@ Contoh response `200`:
 
 Mengambil semua POI yang tersimpan di database.
 
+### `GET /api/pois/:id`
+
+Mengambil satu POI berdasarkan ID, termasuk daftar `images`. Response `404`
+jika POI tidak ditemukan.
+
+### `GET /api/pois/:id/images`
+
+Mengambil daftar gambar valid untuk satu POI, diurutkan berdasarkan
+`sort_order`.
+
 Contoh response `200`:
 
 ```json

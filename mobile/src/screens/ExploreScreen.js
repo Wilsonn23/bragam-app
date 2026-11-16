@@ -21,7 +21,8 @@ import MapView, {
 import * as Location from 'expo-location';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
-import { WireframeImageBox, PoiDetailFooter } from '../components/PoiCardComponents';
+import { PoiDetailFooter } from '../components/PoiCardComponents';
+import PoiImageGallery from '../components/PoiImageGallery';
 import SearchPoiOverlay from '../components/SearchPoiOverlay';
 import { API_BASE_URL } from '../config/api';
 import {
@@ -613,9 +614,7 @@ export default function ExploreScreen({
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.carouselRow}
                 >
-                  <WireframeImageBox width={105} height={105} />
-                  <WireframeImageBox width={105} height={105} />
-                  <WireframeImageBox width={105} height={105} />
+                  <PoiImageGallery poi={poi} compact />
                 </ScrollView>
 
                 <View style={{ paddingHorizontal: 20 }}>

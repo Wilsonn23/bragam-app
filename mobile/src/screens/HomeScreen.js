@@ -17,10 +17,17 @@ const TRIP_STOPS = [
 ];
 
 export default function HomeScreen({
+  pois = [],
   onOpenDetail,
   onOpenDirections,
   onUseTrip,
 }) {
+  const recommendedPoi = pois.find((poi) => poi.id === 'P01') || pois[0] || {
+    name: 'Braga Citywalk',
+    distance: '12km',
+    rating: '5.0',
+  };
+
   return (
     <View style={styles.root}>
       {/* Top Purple Header */}
@@ -171,14 +178,14 @@ export default function HomeScreen({
           <WireframeImageBox height={145} />
 
           <PoiDetailFooter
-            name="Braga Citywalk"
-            distance="12km"
-            rating="5.0"
+            name={recommendedPoi.name}
+            distance={recommendedPoi.distance || `${recommendedPoi.triggerRadiusMeters || 10}m`}
+            rating={recommendedPoi.rating || '5.0'}
             onCheckDetail={() =>
-              onOpenDetail?.({ name: 'Braga Citywalk', distance: '12km', rating: '5.0' })
+              onOpenDetail?.(recommendedPoi)
             }
             onDirections={() =>
-              onOpenDirections?.({ name: 'Braga Citywalk', distance: '12km', rating: '5.0' })
+              onOpenDirections?.(recommendedPoi)
             }
           />
 
