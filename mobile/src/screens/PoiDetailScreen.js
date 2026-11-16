@@ -8,15 +8,22 @@ import { getOperatingStatus, getPoiDetailFields, getPoiGalleryImages, getRatingS
 import { useAppActive, useForegroundLocation } from '../hooks/useForegroundLocation';
 import { distanceMeters } from '../location/distance';
 import { useGuideAudio } from '../audio/AudioProvider';
+import { audioSourceFor, bundledAudioFor, AUDIO_ERROR } from '../audio/guideController';
+import { POI_AUDIO_ASSETS } from '../audio/guideAssets';
 
 const DETAIL_TABS = ['Overview', 'Menu', 'Review', 'About'];
 
-export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audioControl = undefined, isSaved = false, onToggleSave = undefined, onAddToItinerary = undefined }) {
+export default function PoiDetailScreen({ poi, onBack, onOpenDirections, isSaved = false, onToggleSave = undefined, onAddToItinerary = undefined }) {
   const appActive = useAppActive();
   const { sample } = useForegroundLocation(appActive);
   const audio = useGuideAudio();
-  const audioUrl = typeof poi.audioUrl === 'string' && /^https:\/\//i.test(poi.audioUrl) ? poi.audioUrl : null;
-  const playing = audio.currentId === poi.id && audio.status.playing;
+  const audioPoi = { ...poi, audioAsset: bundledAudioFor(poi, POI_AUDIO_ASSETS) };
+  const audioSource = audioSourceFor(audioPoi);
+  const activeAudio = audio.currentId === poi.id;
+  const playing = activeAudio && audio.status.playing;
+  const audioError = activeAudio && (audio.error || (!audio.pending && audio.status.error && AUDIO_ERROR));
+  const audioLoading = activeAudio && audio.intent && !audioError && (audio.pending || audio.status.isBuffering || (!audio.status.isLoaded && !playing));
+  const audioLabel = audioError ? 'Coba lagi' : audioLoading ? 'Memuat audio' : playing ? 'Jeda audio' : activeAudio && audio.status.isLoaded && !audio.status.didJustFinish ? 'Lanjutkan audio' : 'Nyalakan audio';
   const [activeTab, setActiveTab] = useState('Overview');
   const [failedImages, setFailedImages] = useState([]);
   const [now, setNow] = useState(() => Date.now());
@@ -54,12 +61,14 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections, audioCo
               ))}
             </View>
           </View>
-          {audioControl || <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: !audioUrl }}
-            disabled={!audioUrl} onPress={() => audio.toggle({ ...poi, audioUrl })} style={[styles.audioBtn, !audioUrl && styles.disabled]}>
-            <Text style={styles.audioBtnText}>{playing ? 'Jeda audio' : 'Nyalakan audio'}</Text>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={audioLoading ? 'Batalkan pemuatan audio' : audioLabel}
+            accessibilityState={{ disabled: audioSource === null, busy: !!audioLoading }}
+            disabled={audioSource === null} onPress={() => audio.toggle(audioPoi)} style={[styles.audioBtn, audioSource === null && styles.disabled]}>
+            <Text style={styles.audioBtnText}>{audioLabel}</Text>
             <Ionicons name={playing ? 'pause' : 'volume-high'} size={15} color={COLORS.white} style={{ marginLeft: 4 }} />
-          </TouchableOpacity>}
+          </TouchableOpacity>
         </View>
+        {!!audioError && <Text accessibilityLiveRegion="polite" style={styles.audioError}>{audioError}</Text>}
         <View style={styles.actionRow}>
           <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: !onOpenDirections }} disabled={!onOpenDirections}
             onPress={() => onOpenDirections?.(poi)} style={[styles.outlinePillBtn, !onOpenDirections && styles.disabled]}>
@@ -172,6 +181,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   categoryText: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 4 },
+  audioError: { fontSize: 12, color: COLORS.textSecondary, marginHorizontal: 20, marginTop: 6 },
   galleryImage: { width: 220, height: 232, borderRadius: RADIUS.md, backgroundColor: COLORS.lavenderTint },
   galleryCaption: { color: COLORS.textSecondary, fontSize: 12, marginHorizontal: 20, marginTop: 6 },
   disabled: { opacity: 0.45 },
