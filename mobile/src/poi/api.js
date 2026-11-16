@@ -1,6 +1,5 @@
 import { adaptPois } from './adapter';
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000';
+import { API_BASE_URL } from '../config/api';
 
 export async function fetchPois() {
   const response = await fetch(`${API_BASE_URL}/api/pois`);

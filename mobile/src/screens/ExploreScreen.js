@@ -23,6 +23,7 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 import { WireframeImageBox, PoiDetailFooter } from '../components/PoiCardComponents';
 import SearchPoiOverlay from '../components/SearchPoiOverlay';
+import { API_BASE_URL } from '../config/api';
 import {
   BRAGA_REGION,
   BRAGA_POIS,
@@ -30,9 +31,6 @@ import {
   BRAGA_GRAY_MAP_STYLE,
 } from '../constants/bragaMapData';
 import { useAppActive, useForegroundLocation } from '../hooks/useForegroundLocation';
-
-// Sesuaikan IP komputer & PORT dengan yang ada di backend/.env
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.32.115.68:5000';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 275;

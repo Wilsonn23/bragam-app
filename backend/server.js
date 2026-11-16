@@ -9,6 +9,15 @@ require('dotenv').config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    console.info(
+      `[HTTP] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${Date.now() - startedAt}ms)`
+    );
+  });
+  next();
+});
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 app.get('/openapi.json', (req, res) => res.json(openapiSpec));
 
@@ -32,12 +41,14 @@ app.get('/health', (req, res) => {
 
 app.get('/api/pois', async (req, res, next) => {
   try {
-    const { rows } = await pool.query(`
+    const result = await pool.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
-             description, notification_title, audio_guide_url
+             description, image_url, notification_title, audio_guide_url
       FROM pois
       ORDER BY id
     `);
+    const rows = await withImages(result.rows);
+    console.info(`[DB] /api/pois loaded ${rows.length} POI(s)`);
     res.json(rows.map(toPoiResponse));
   } catch (error) {
     next(error);
@@ -54,6 +65,7 @@ app.get('/api/categories', async (req, res, next) => {
       ORDER BY category ASC
     `);
     const categories = ['Semua', ...rows.map((r) => r.category)];
+    console.info(`[DB] /api/categories loaded ${rows.length} category row(s)`);
     res.json({ categories });
   } catch (error) {
     next(error);
@@ -86,10 +98,11 @@ app.get('/api/pois/search', async (req, res, next) => {
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const { rows } = await pool.query(
+    const result = await pool.query(
       `SELECT * FROM pois ${whereClause} ORDER BY id ASC`,
       values
     );
+    const rows = result.rows;
 
     const filtered = rows.filter((row) => {
       if (timeCategory !== 'semua' && row.time_category != null) {
@@ -110,8 +123,14 @@ app.get('/api/pois/search', async (req, res, next) => {
       return true;
     });
 
+    console.info(
+      `[DB] /api/pois/search q="${q}" category="${category}" ` +
+      `time="${timeCategory}" environment="${environment}" minRating="${minRating}" ` +
+      `loaded=${rows.length} returned=${filtered.length}`
+    );
+    const rowsWithImages = await withImages(filtered);
     res.json({
-      data: filtered.map((row) => ({
+      data: rowsWithImages.map((row) => ({
         ...toPoiResponse(row),
         description: row.description || '',
         rating: row.rating != null ? Number(row.rating).toFixed(1) : '5.0',
@@ -143,7 +162,7 @@ app.get('/api/pois/nearby', async (req, res, next) => {
   }
 
   try {
-    const { rows } = await pool.query(`
+    const result = await pool.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
              description, notification_title, audio_guide_url,
              ST_Distance(
@@ -159,6 +178,11 @@ app.get('/api/pois/nearby', async (req, res, next) => {
       ORDER BY distance_meters ASC
       LIMIT 1
     `, [latitude, longitude, maxRadius]);
+    const rows = await withImages(result.rows);
+    console.info(
+      `[DB] /api/pois/nearby lat=${latitude} lng=${longitude} ` +
+      `maxRadius=${maxRadius} found=${rows.length}`
+    );
     res.json(rows.length ? toPoiResponse(rows[0]) : null);
   } catch (error) {
     next(error);
@@ -174,6 +198,11 @@ app.use((error, req, res, next) => {
 });
 
 function toPoiResponse(row) {
+  const images = Array.isArray(row.images) ? row.images : [];
+  const legacyImageUrl = typeof row.image_url === 'string' &&
+    /^https?:\/\//i.test(row.image_url) ? row.image_url : undefined;
+  const imageUrl = images[0]?.imageUrl || legacyImageUrl;
+
   return {
     id: row.id,
     name: row.name,
@@ -182,11 +211,42 @@ function toPoiResponse(row) {
     longitude: Number(row.longitude),
     triggerRadiusMeters: Number(row.radius_meters),
     shortDescription: row.description || '',
+    imageUrl,
+    images,
     notificationTitle: row.notification_title || '',
-    imageUrl: undefined,
     audioGuideUrl: row.audio_guide_url || undefined,
     distanceMeters: row.distance_meters === undefined ? undefined : Number(row.distance_meters),
   };
+}
+
+async function withImages(rows) {
+  if (!rows.length) return rows;
+
+  const poiIds = rows.map((row) => row.id);
+  const { rows: imageRows } = await pool.query(`
+    SELECT id, poi_id, image_url, alt_text, sort_order
+    FROM poi_images
+    WHERE poi_id = ANY($1::varchar[])
+    ORDER BY poi_id, sort_order, id
+  `, [poiIds]);
+
+  const imagesByPoi = new Map();
+  for (const image of imageRows) {
+    if (!/^https?:\/\//i.test(image.image_url)) continue;
+    const images = imagesByPoi.get(image.poi_id) || [];
+    images.push({
+      id: String(image.id),
+      imageUrl: image.image_url,
+      altText: image.alt_text || '',
+      sortOrder: image.sort_order,
+    });
+    imagesByPoi.set(image.poi_id, images);
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    images: imagesByPoi.get(row.id) || [],
+  }));
 }
 
 app.listen(PORT, '0.0.0.0', () => {

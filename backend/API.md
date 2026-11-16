@@ -74,6 +74,15 @@ Contoh response `200`:
     "longitude": 107.60912,
     "triggerRadiusMeters": 10,
     "shortDescription": "Restoran legendaris...",
+    "imageUrl": "https://example.com/maison-bogerijen.jpg",
+    "images": [
+      {
+        "id": "1",
+        "imageUrl": "https://example.com/maison-bogerijen.jpg",
+        "altText": "Tampilan Maison Bogerijen",
+        "sortOrder": 0
+      }
+    ],
     "notificationTitle": "Kuliner Legendaris Braga",
     "audioGuideUrl": null
   }
@@ -115,6 +124,23 @@ Response jika ditemukan:
 ```
 
 Jika tidak ada POI dalam radius, response adalah `null`.
+
+### Menambahkan gambar POI
+
+Satu POI dapat memiliki banyak gambar melalui tabel `poi_images`:
+
+```sql
+INSERT INTO poi_images (poi_id, image_url, alt_text, sort_order)
+VALUES (
+  'P01',
+  'https://example.com/maison-bogerijen.jpg',
+  'Tampilan Maison Bogerijen',
+  0
+);
+```
+
+`image_url` wajib menggunakan URL `http://` atau `https://`. API mengembalikan
+semua gambar pada field `images` dan gambar pertama sebagai `imageUrl`.
 
 ## Users
 
