@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, StatusBar } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { fetchPois } from './src/poi/api';
+import { BRAGA_POIS } from './src/constants/bragaMapData';
+import { View, StyleSheet, StatusBar, Alert } from 'react-native';
 import BottomNavBar from './src/components/BottomNavBar';
 import PoiTriggerModal from './src/components/PoiTriggerModal';
 import HomeScreen from './src/screens/HomeScreen';
@@ -9,23 +11,95 @@ import AccountScreen from './src/screens/AccountScreen';
 import PoiDetailScreen from './src/screens/PoiDetailScreen';
 import NavigationScreen from './src/screens/NavigationScreen';
 import TripRouteSummaryScreen from './src/screens/TripRouteSummaryScreen';
+import BookmarkScreen from './src/screens/BookmarkScreen';
 import { COLORS } from './src/components/theme';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('Home');
 
-  // Sub-screens state: null | 'PoiDetail' | 'Navigation' | 'TripSummary'
+  // Sub-screens state: null | 'PoiDetail' | 'Navigation' | 'TripSummary' | 'Bookmark'
   const [subScreen, setSubScreen] = useState(null);
   const [selectedPoi, setSelectedPoi] = useState(null);
   const [selectedTrip, setSelectedTrip] = useState(null);
 
-  // State khusus Geofence Trigger Notification (hanya muncul jika geofence terpicu)
+  // State daftar POI yang disimpan ke Bookmark
+  const [bookmarkedPois, setBookmarkedPois] = useState([]);
+
+  // State khusus Geofence Trigger Notification
   const [geofencePoi, setGeofencePoi] = useState(null);
 
-  // Hitung penyusutan tinggi window saat keyboard muncul agar navbar & sheet tetap di bawah
+  // Hitung penyusutan tinggi window saat keyboard muncul
   const [fullHeight, setFullHeight] = useState(0);
   const [currentHeight, setCurrentHeight] = useState(0);
   const [navHeight, setNavHeight] = useState(0);
+
+  const [pois, setPois] = useState(BRAGA_POIS);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchPois()
+      .then((data) => {
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setPois(data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const isPoiBookmarked = (targetPoi) => {
+    if (!targetPoi) return false;
+    return bookmarkedPois.some(
+      (item) =>
+        (targetPoi.id && String(item.id) === String(targetPoi.id)) ||
+        item.name?.toLowerCase() === targetPoi.name?.toLowerCase()
+    );
+  };
+
+  // Menambahkan POI ke Bookmark (atau menghapus jika ditekan kembali)
+  const handleToggleSavePoi = (targetPoi) => {
+    if (!targetPoi) return;
+    setBookmarkedPois((prev) => {
+      const exists = prev.some(
+        (item) =>
+          (targetPoi.id && String(item.id) === String(targetPoi.id)) ||
+          item.name?.toLowerCase() === targetPoi.name?.toLowerCase()
+      );
+      if (exists) {
+        return prev.filter(
+          (item) =>
+            !(
+              (targetPoi.id && String(item.id) === String(targetPoi.id)) ||
+              item.name?.toLowerCase() === targetPoi.name?.toLowerCase()
+            )
+        );
+      }
+      return [targetPoi, ...prev];
+    });
+  };
+
+  // Menghapus POI setelah konfirmasi "Ya" pada halaman Bookmark
+  const handleRemoveBookmark = (targetPoi) => {
+    if (!targetPoi) return;
+    setBookmarkedPois((prev) =>
+      prev.filter(
+        (item) =>
+          !(
+            (targetPoi.id && String(item.id) === String(targetPoi.id)) ||
+            item.name?.toLowerCase() === targetPoi.name?.toLowerCase()
+          )
+      )
+    );
+  };
+
+  const handleAddToItinerary = (targetPoi) => {
+    Alert.alert(
+      'Berhasil Ditambahkan',
+      `${targetPoi.name} telah ditambahkan ke Itinerary perjalananmu.`
+    );
+  };
 
   const handleContainerLayout = (event) => {
     const { height } = event.nativeEvent.layout;
@@ -49,6 +123,10 @@ export default function App() {
     setSubScreen('Navigation');
   };
 
+  const handleOpenBookmarks = () => {
+    setSubScreen('Bookmark');
+  };
+
   const handleUseTrip = (trip) => {
     setSelectedTrip(trip);
     setActiveTab('Trip');
@@ -65,8 +143,24 @@ export default function App() {
       return (
         <PoiDetailScreen
           poi={selectedPoi}
+          isSaved={isPoiBookmarked(selectedPoi)}
+          onToggleSave={handleToggleSavePoi}
+          onAddToItinerary={handleAddToItinerary}
           onBack={() => setSubScreen(null)}
           onOpenDirections={handleOpenDirections}
+        />
+      );
+    }
+
+    if (subScreen === 'Bookmark') {
+      return (
+        <BookmarkScreen
+          bookmarkedPois={bookmarkedPois}
+          onBack={() => setSubScreen(null)}
+          onOpenDetail={handleOpenDetail}
+          onOpenDirections={handleOpenDirections}
+          onRemoveBookmark={handleRemoveBookmark}
+          onAddToItinerary={handleAddToItinerary}
         />
       );
     }
@@ -75,6 +169,7 @@ export default function App() {
       return (
         <NavigationScreen
           poi={selectedPoi}
+          pois={pois}
           onBack={() => setSubScreen(null)}
         />
       );
@@ -93,8 +188,10 @@ export default function App() {
       case 'Home':
         return (
           <HomeScreen
+            pois={pois}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
+            onOpenBookmarks={handleOpenBookmarks}
             onUseTrip={handleUseTrip}
           />
         );
@@ -102,16 +199,19 @@ export default function App() {
         return (
           <ExploreScreen
             windowShrink={windowShrink}
+            pois={pois}
+            bookmarkedPois={bookmarkedPois}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
-            // Tekan tahan ikon bookmark di kanan atas Explore untuk menguji pop-up geofence
-            onSimulateGeofence={() =>
-              setGeofencePoi({
-                name: 'Braga Citywalk',
-                distance: '12km',
-                rating: '5.0',
-              })
-            }
+            onOpenBookmarks={handleOpenBookmarks}
+            onToggleSave={handleToggleSavePoi}
+            onAddToItinerary={handleAddToItinerary}
+            onSimulateGeofence={() => {
+              const target =
+                pois.find((p) => p.name.toLowerCase().includes('citywalk')) ||
+                pois[0];
+              setGeofencePoi(target);
+            }}
           />
         );
       case 'Trip':
@@ -119,11 +219,10 @@ export default function App() {
       case 'Account':
         return <AccountScreen />;
       default:
-        return <HomeScreen />;
+        return <HomeScreen pois={pois} />;
     }
   };
 
-  // POI Detail tampil penuh tanpa BottomNavBar sesuai desain
   const showBottomNav = subScreen !== 'PoiDetail';
 
   const isLightStatusBar =
