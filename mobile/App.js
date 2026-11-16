@@ -1,130 +1,64 @@
-import React, { useState, useEffect } from 'react';
-import { fetchPois } from './src/poi/api';
-import { BRAGA_POIS } from './src/constants/bragaMapData';
-import { View, StyleSheet, StatusBar, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, StatusBar, ActivityIndicator } from 'react-native';
 import BottomNavBar from './src/components/BottomNavBar';
 import PoiTriggerModal from './src/components/PoiTriggerModal';
 import HomeScreen from './src/screens/HomeScreen';
 import ExploreScreen from './src/screens/ExploreScreen';
 import TripScreen from './src/screens/TripScreen';
 import AccountScreen from './src/screens/AccountScreen';
-import PoiDetailScreen from './src/screens/PoiDetailScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import { router, usePathname } from 'expo-router';
+import { usePois } from './src/poi/PoiProvider';
+import { openPoiDetail } from './src/poi/notification';
+import { useAppActive, useForegroundLocation } from './src/hooks/useForegroundLocation';
+import { usePoiTriggers } from './src/hooks/usePoiTriggers';
+import { ActionButton } from './src/components/ActionButton';
 import NavigationScreen from './src/screens/NavigationScreen';
 import TripRouteSummaryScreen from './src/screens/TripRouteSummaryScreen';
-import BookmarkScreen from './src/screens/BookmarkScreen';
 import { COLORS } from './src/components/theme';
+import { BRAGA_ZONE_POLYGON } from './src/constants/bragaMapData';
+import { isPointInPolygon, validCoordinate } from './src/location/distance';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState('Home');
+  const data = usePois();
+  const active = useAppActive();
+  const path = usePathname();
 
-  // Sub-screens state: null | 'PoiDetail' | 'Navigation' | 'TripSummary' | 'Bookmark'
+  // Existing non-Router sub-screens: Navigation and TripSummary.
   const [subScreen, setSubScreen] = useState(null);
   const [selectedPoi, setSelectedPoi] = useState(null);
   const [selectedTrip, setSelectedTrip] = useState(null);
 
-  // State daftar POI yang disimpan ke Bookmark
-  const [bookmarkedPois, setBookmarkedPois] = useState([]);
-
-  // State khusus Geofence Trigger Notification
-  const [geofencePoi, setGeofencePoi] = useState(null);
-
-  // Hitung penyusutan tinggi window saat keyboard muncul
-  const [fullHeight, setFullHeight] = useState(0);
-  const [currentHeight, setCurrentHeight] = useState(0);
-  const [navHeight, setNavHeight] = useState(0);
-
-  const [pois, setPois] = useState(BRAGA_POIS);
-
-  useEffect(() => {
-    let isMounted = true;
-    fetchPois()
-      .then((data) => {
-        if (isMounted && Array.isArray(data) && data.length > 0) {
-          setPois(data);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const isPoiBookmarked = (targetPoi) => {
-    if (!targetPoi) return false;
-    return bookmarkedPois.some(
-      (item) =>
-        (targetPoi.id && String(item.id) === String(targetPoi.id)) ||
-        item.name?.toLowerCase() === targetPoi.name?.toLowerCase()
-    );
+  const exploring = active && path === '/' && activeTab === 'Explore' && subScreen === null;
+  const gps = useForegroundLocation(exploring);
+  const sample = gps.sample;
+  const { event, dismiss } = usePoiTriggers(data.records, sample, exploring);
+  const handleOpenDetail = poi => {
+    if (poi?.id) openPoiDetail(poi.id, target => router.push(target));
   };
-
-  // Menambahkan POI ke Bookmark (atau menghapus jika ditekan kembali)
-  const handleToggleSavePoi = (targetPoi) => {
-    if (!targetPoi) return;
-    setBookmarkedPois((prev) => {
-      const exists = prev.some(
-        (item) =>
-          (targetPoi.id && String(item.id) === String(targetPoi.id)) ||
-          item.name?.toLowerCase() === targetPoi.name?.toLowerCase()
-      );
-      if (exists) {
-        return prev.filter(
-          (item) =>
-            !(
-              (targetPoi.id && String(item.id) === String(targetPoi.id)) ||
-              item.name?.toLowerCase() === targetPoi.name?.toLowerCase()
-            )
-        );
-      }
-      return [targetPoi, ...prev];
-    });
+  const onOpenPoiDetail = poiId => {
+    dismiss();
+    openPoiDetail(poiId, target => router.push(target));
   };
-
-  // Menghapus POI setelah konfirmasi "Ya" pada halaman Bookmark
-  const handleRemoveBookmark = (targetPoi) => {
-    if (!targetPoi) return;
-    setBookmarkedPois((prev) =>
-      prev.filter(
-        (item) =>
-          !(
-            (targetPoi.id && String(item.id) === String(targetPoi.id)) ||
-            item.name?.toLowerCase() === targetPoi.name?.toLowerCase()
-          )
-      )
-    );
-  };
-
-  const handleAddToItinerary = (targetPoi) => {
-    Alert.alert(
-      'Berhasil Ditambahkan',
-      `${targetPoi.name} telah ditambahkan ke Itinerary perjalananmu.`
-    );
-  };
-
-  const handleContainerLayout = (event) => {
-    const { height } = event.nativeEvent.layout;
-    if (height > 0) {
-      setCurrentHeight(height);
-      setFullHeight((prev) => (height > prev ? height : prev));
-    }
-  };
-
-  const windowShrink =
-    fullHeight > 0 && currentHeight > 0 ? Math.max(0, fullHeight - currentHeight) : 0;
-
-  const handleOpenDetail = (poi) => {
-    setSelectedPoi(poi);
-    setSubScreen('PoiDetail');
-  };
+  const outsideBraga = validCoordinate(sample) && !isPointInPolygon(sample, BRAGA_ZONE_POLYGON);
+  const hasLocationFeedback = data.status === 'loading' || data.status === 'empty' || data.error ||
+    gps.loading || gps.error || outsideBraga;
+  const locationFeedback = hasLocationFeedback ? <View style={{ gap: 8, padding: 16 }}>
+    {data.status === 'loading' && <ActivityIndicator accessibilityLabel="Memuat destinasi" color={COLORS.darkPurple} />}
+    {data.error && <Text accessibilityLiveRegion="polite">{data.error}</Text>}
+    {data.error && <ActionButton label="Coba muat destinasi lagi" onPress={data.retry} />}
+    {data.status === 'empty' && <><Text>Belum ada destinasi tersedia.</Text><ActionButton label="Muat ulang destinasi" onPress={data.retry} /></>}
+    {gps.loading && <Text>Membaca lokasi…</Text>}
+    {gps.error && <><Text accessibilityLiveRegion="polite">{gps.error}</Text><ActionButton label="Coba GPS lagi" onPress={gps.retry} /></>}
+    {outsideBraga && <Text accessibilityLiveRegion="polite">Kamu sedang berada di luar area Braga.</Text>}
+  </View> : null;
 
   const handleOpenDirections = (poi) => {
-    setSelectedPoi(poi);
+    setSelectedPoi({ ...poi, coordinate: { latitude: poi.latitude, longitude: poi.longitude } });
     setActiveTab('Explore');
     setSubScreen('Navigation');
-  };
-
-  const handleOpenBookmarks = () => {
-    setSubScreen('Bookmark');
   };
 
   const handleUseTrip = (trip) => {
@@ -138,38 +72,21 @@ export default function App() {
     setActiveTab(tab);
   };
 
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setSubScreen(null);
+    setActiveTab('Home');
+  };
+
+  if (!currentUser) {
+    return <LoginScreen onLogin={setCurrentUser} />;
+  }
+
   const renderContent = () => {
-    if (subScreen === 'PoiDetail') {
-      return (
-        <PoiDetailScreen
-          poi={selectedPoi}
-          isSaved={isPoiBookmarked(selectedPoi)}
-          onToggleSave={handleToggleSavePoi}
-          onAddToItinerary={handleAddToItinerary}
-          onBack={() => setSubScreen(null)}
-          onOpenDirections={handleOpenDirections}
-        />
-      );
-    }
-
-    if (subScreen === 'Bookmark') {
-      return (
-        <BookmarkScreen
-          bookmarkedPois={bookmarkedPois}
-          onBack={() => setSubScreen(null)}
-          onOpenDetail={handleOpenDetail}
-          onOpenDirections={handleOpenDirections}
-          onRemoveBookmark={handleRemoveBookmark}
-          onAddToItinerary={handleAddToItinerary}
-        />
-      );
-    }
-
     if (subScreen === 'Navigation') {
       return (
         <NavigationScreen
           poi={selectedPoi}
-          pois={pois}
           onBack={() => setSubScreen(null)}
         />
       );
@@ -188,88 +105,49 @@ export default function App() {
       case 'Home':
         return (
           <HomeScreen
-            pois={pois}
+            pois={data.records}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
-            onOpenBookmarks={handleOpenBookmarks}
             onUseTrip={handleUseTrip}
           />
         );
       case 'Explore':
         return (
           <ExploreScreen
-            windowShrink={windowShrink}
-            pois={pois}
-            bookmarkedPois={bookmarkedPois}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
-            onOpenBookmarks={handleOpenBookmarks}
-            onToggleSave={handleToggleSavePoi}
-            onAddToItinerary={handleAddToItinerary}
-            onSimulateGeofence={() => {
-              const target =
-                pois.find((p) => p.name.toLowerCase().includes('citywalk')) ||
-                pois[0];
-              setGeofencePoi(target);
-            }}
+            pois={data.records}
+            sample={sample}
+            statusContent={locationFeedback}
           />
         );
       case 'Trip':
         return <TripScreen onUseTrip={handleUseTrip} />;
       case 'Account':
-        return <AccountScreen />;
+        return <AccountScreen user={currentUser} onLogout={handleLogout} />;
       default:
-        return <HomeScreen pois={pois} />;
+        return <HomeScreen pois={data.records} onOpenDetail={handleOpenDetail} onOpenDirections={handleOpenDirections} onUseTrip={handleUseTrip} />;
     }
   };
-
-  const showBottomNav = subScreen !== 'PoiDetail';
 
   const isLightStatusBar =
     subScreen === null && (activeTab === 'Home' || activeTab === 'Account');
 
   return (
-    <View onLayout={handleContainerLayout} style={styles.container}>
+    <View style={styles.container}>
       <StatusBar
         barStyle={isLightStatusBar ? 'light-content' : 'dark-content'}
-        backgroundColor={isLightStatusBar ? COLORS.primaryPurple : COLORS.softLilacBg}
       />
 
-      <View
-        style={[
-          styles.screenWrapper,
-          showBottomNav && navHeight > 0 ? { paddingBottom: navHeight } : null,
-        ]}
-      >
-        {renderContent()}
-      </View>
+      <View style={styles.screenWrapper}>{renderContent()}</View>
 
-      {showBottomNav && (
-        <View
-          onLayout={(event) => {
-            const h = event.nativeEvent.layout.height;
-            if (h > 0 && h !== navHeight) setNavHeight(h);
-          }}
-          style={[styles.fixedBottomNav, { bottom: -windowShrink }]}
-        >
-          <BottomNavBar activeTab={activeTab} onSelectTab={handleSelectTab} />
-        </View>
-      )}
+      <BottomNavBar activeTab={activeTab} onSelectTab={handleSelectTab} />
 
-      {/* Geofence Notification Pop-up */}
-      <PoiTriggerModal
-        visible={Boolean(geofencePoi)}
-        poi={geofencePoi}
-        onClose={() => setGeofencePoi(null)}
-        onCheckNow={(poi) => {
-          setGeofencePoi(null);
-          handleOpenDetail(poi);
-        }}
-        onDirections={(poi) => {
-          setGeofencePoi(null);
-          handleOpenDirections(poi);
-        }}
-      />
+      <PoiTriggerModal poi={event?.poi} distanceMeters={event?.distanceMeters} onClose={dismiss} onOpenPoiDetail={onOpenPoiDetail}
+        onDirections={poiId => {
+          const poi = data.records.find(record => record.id === poiId);
+          if (poi) { dismiss(); handleOpenDirections(poi); }
+        }} />
     </View>
   );
 }
@@ -281,11 +159,5 @@ const styles = StyleSheet.create({
   },
   screenWrapper: {
     flex: 1,
-  },
-  fixedBottomNav: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
 });

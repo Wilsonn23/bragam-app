@@ -37,42 +37,6 @@ module.exports = {
         },
       },
     },
-    '/api/pois/{id}': {
-      parameters: [{ $ref: '#/components/parameters/PoiId' }],
-      get: {
-        tags: ['POI'],
-        summary: 'Ambil detail POI',
-        responses: {
-          200: {
-            description: 'Detail POI',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/Poi' } } },
-          },
-          404: { description: 'POI tidak ditemukan' },
-          500: { $ref: '#/components/responses/DatabaseError' },
-        },
-      },
-    },
-    '/api/pois/{id}/images': {
-      parameters: [{ $ref: '#/components/parameters/PoiId' }],
-      get: {
-        tags: ['POI'],
-        summary: 'Ambil gambar POI',
-        responses: {
-          200: {
-            description: 'Daftar gambar POI',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'array',
-                  items: { $ref: '#/components/schemas/PoiImage' },
-                },
-              },
-            },
-          },
-          500: { $ref: '#/components/responses/DatabaseError' },
-        },
-      },
-    },
     '/api/pois/nearby': {
       get: {
         tags: ['POI'],
@@ -195,12 +159,6 @@ module.exports = {
         required: true,
         schema: { type: 'string', format: 'uuid' },
       },
-      PoiId: {
-        name: 'id',
-        in: 'path',
-        required: true,
-        schema: { type: 'string', example: 'P01' },
-      },
     },
     schemas: {
       Health: {
@@ -220,26 +178,13 @@ module.exports = {
           latitude: { type: 'number', example: -6.91775 },
           longitude: { type: 'number', example: 107.60912 },
           triggerRadiusMeters: { type: 'number', example: 10 },
+          cooldownSeconds: { type: 'number', example: 60 },
           description: { type: 'string' },
+          notificationBody: { type: 'string', nullable: true },
           shortDescription: { type: 'string' },
-          history: { type: 'string' },
           notificationTitle: { type: 'string' },
           audioGuideUrl: { type: 'string', nullable: true },
           distanceMeters: { type: 'number', nullable: true },
-          images: {
-            type: 'array',
-            items: { $ref: '#/components/schemas/PoiImage' },
-          },
-        },
-      },
-      PoiImage: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', example: '1' },
-          poiId: { type: 'string', example: 'P01' },
-          imageUrl: { type: 'string', format: 'uri' },
-          altText: { type: 'string' },
-          sortOrder: { type: 'integer', minimum: 0 },
         },
       },
       User: {

@@ -62,16 +62,6 @@ Contoh response `200`:
 
 Mengambil semua POI yang tersimpan di database.
 
-### `GET /api/pois/:id`
-
-Mengambil satu POI berdasarkan ID, termasuk daftar `images`. Response `404`
-jika POI tidak ditemukan.
-
-### `GET /api/pois/:id/images`
-
-Mengambil daftar gambar valid untuk satu POI, diurutkan berdasarkan
-`sort_order`.
-
 Contoh response `200`:
 
 ```json
@@ -83,18 +73,9 @@ Contoh response `200`:
     "latitude": -6.91775,
     "longitude": 107.60912,
     "triggerRadiusMeters": 10,
-    "description": "Restoran legendaris...",
+    "cooldownSeconds": 60,
+    "notificationBody": null,
     "shortDescription": "Restoran legendaris...",
-    "history": "Memiliki sejarah panjang di kawasan Braga...",
-    "imageUrl": "https://example.com/maison-bogerijen.jpg",
-    "images": [
-      {
-        "id": "1",
-        "imageUrl": "https://example.com/maison-bogerijen.jpg",
-        "altText": "Tampilan Maison Bogerijen",
-        "sortOrder": 0
-      }
-    ],
     "notificationTitle": "Kuliner Legendaris Braga",
     "audioGuideUrl": null
   }
@@ -129,32 +110,15 @@ Response jika ditemukan:
   "latitude": -6.91775,
   "longitude": 107.60912,
   "triggerRadiusMeters": 10,
-  "description": "Restoran legendaris...",
+    "cooldownSeconds": 60,
+    "notificationBody": null,
   "shortDescription": "Restoran legendaris...",
-  "history": "Memiliki sejarah panjang di kawasan Braga...",
   "notificationTitle": "Kuliner Legendaris Braga",
   "distanceMeters": 2.41
 }
 ```
 
 Jika tidak ada POI dalam radius, response adalah `null`.
-
-### Menambahkan gambar POI
-
-Satu POI dapat memiliki banyak gambar melalui tabel `poi_images`:
-
-```sql
-INSERT INTO poi_images (poi_id, image_url, alt_text, sort_order)
-VALUES (
-  'P01',
-  'https://example.com/maison-bogerijen.jpg',
-  'Tampilan Maison Bogerijen',
-  0
-);
-```
-
-`image_url` wajib menggunakan URL `http://` atau `https://`. API mengembalikan
-semua gambar pada field `images` dan gambar pertama sebagai `imageUrl`.
 
 ## Users
 
