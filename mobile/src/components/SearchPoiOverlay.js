@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from './theme';
-import { WireframeImageBox } from './PoiCardComponents';
+import { PoiFirstImage } from './PoiImageGallery';
 import { API_BASE_URL } from '../config/api';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -317,7 +317,7 @@ export default function SearchPoiOverlay({
       style={styles.poiCard}
       onPress={() => handleChoosePoi(item)}
     >
-      <WireframeImageBox width={82} height={82} />
+      <PoiFirstImage poi={item} style={styles.searchImage} />
 
       <View style={styles.poiCardBody}>
         <View style={styles.poiTopRow}>
@@ -571,6 +571,12 @@ export default function SearchPoiOverlay({
 }
 
 const styles = StyleSheet.create({
+  searchImage: {
+    width: 82,
+    height: 82,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.lavenderTint,
+  },
   bottomSheet: {
     position: 'absolute',
     left: 0,

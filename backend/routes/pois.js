@@ -6,7 +6,7 @@ router.get('/pois', async (req, res, next) => {
   try {
     const result = await req.db.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
-             description, image_url, notification_title, audio_guide_url
+             description, history, image_url, notification_title, audio_guide_url
       FROM pois
       ORDER BY id
     `);
@@ -119,7 +119,7 @@ router.get('/pois/nearby', async (req, res, next) => {
   try {
     const result = await req.db.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
-             description, notification_title, audio_guide_url,
+             description, history, notification_title, audio_guide_url,
              ST_Distance(
                location::geography,
                ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
@@ -171,7 +171,7 @@ router.get('/pois/:id', async (req, res, next) => {
   try {
     const result = await req.db.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
-             description, image_url, notification_title, audio_guide_url
+             description, history, image_url, notification_title, audio_guide_url
       FROM pois
       WHERE id = $1
       LIMIT 1
@@ -201,7 +201,9 @@ function toPoiResponse(row) {
     latitude: Number(row.latitude),
     longitude: Number(row.longitude),
     triggerRadiusMeters: Number(row.radius_meters),
+    description: row.description || '',
     shortDescription: row.description || '',
+    history: row.history || '',
     imageUrl,
     images,
     notificationTitle: row.notification_title || '',

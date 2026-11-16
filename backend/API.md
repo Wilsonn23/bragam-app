@@ -83,7 +83,9 @@ Contoh response `200`:
     "latitude": -6.91775,
     "longitude": 107.60912,
     "triggerRadiusMeters": 10,
+    "description": "Restoran legendaris...",
     "shortDescription": "Restoran legendaris...",
+    "history": "Memiliki sejarah panjang di kawasan Braga...",
     "imageUrl": "https://example.com/maison-bogerijen.jpg",
     "images": [
       {
@@ -127,7 +129,9 @@ Response jika ditemukan:
   "latitude": -6.91775,
   "longitude": 107.60912,
   "triggerRadiusMeters": 10,
+  "description": "Restoran legendaris...",
   "shortDescription": "Restoran legendaris...",
+  "history": "Memiliki sejarah panjang di kawasan Braga...",
   "notificationTitle": "Kuliner Legendaris Braga",
   "distanceMeters": 2.41
 }

@@ -21,6 +21,25 @@ function validImageUrls(poi) {
   return [...new Set(urls)];
 }
 
+export function PoiFirstImage({ poi, style }) {
+  const firstUrl = useMemo(() => validImageUrls(poi)[0], [poi]);
+  const [failedUrl, setFailedUrl] = useState(null);
+
+  if (!firstUrl || failedUrl === firstUrl) {
+    return <View style={[style, styles.firstPlaceholder]} />;
+  }
+
+  return (
+    <Image
+      source={{ uri: firstUrl }}
+      style={style}
+      resizeMode="cover"
+      accessibilityLabel={`Foto ${poi?.name || 'POI'}`}
+      onError={() => setFailedUrl(firstUrl)}
+    />
+  );
+}
+
 export default function PoiImageGallery({ poi, compact = false }) {
   const urls = useMemo(() => validImageUrls(poi), [poi]);
   const [failedUrls, setFailedUrls] = useState([]);

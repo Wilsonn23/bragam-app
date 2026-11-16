@@ -272,6 +272,21 @@ export default function PoiDetailScreen({
               </Text>
             </View>
           </View>
+        ) : activeTab === 'About' ? (
+          <View style={styles.aboutList}>
+            <View style={styles.aboutSection}>
+              <Text style={styles.aboutHeading}>Description</Text>
+              <Text style={styles.aboutText}>
+                {poi?.description || poi?.shortDescription || 'Deskripsi belum tersedia.'}
+              </Text>
+            </View>
+            <View style={styles.aboutSection}>
+              <Text style={styles.aboutHeading}>History</Text>
+              <Text style={styles.aboutText}>
+                {poi?.history || 'History belum tersedia.'}
+              </Text>
+            </View>
+          </View>
         ) : (
           <View style={styles.placeholderTabBox}>
             <Text style={styles.placeholderTabText}>
@@ -427,6 +442,25 @@ const styles = StyleSheet.create({
   },
   overviewList: {
     backgroundColor: COLORS.white,
+  },
+  aboutList: {
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 20,
+    paddingVertical: 6,
+  },
+  aboutSection: {
+    paddingVertical: 12,
+  },
+  aboutHeading: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 6,
+  },
+  aboutText: {
+    fontSize: 13,
+    color: COLORS.textPrimary,
+    lineHeight: 20,
   },
   detailRow: {
     flexDirection: 'row',
