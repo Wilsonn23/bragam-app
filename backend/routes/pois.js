@@ -6,7 +6,8 @@ router.get('/pois', async (req, res, next) => {
   try {
     const result = await req.db.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
-             description, history, image_url, notification_title, audio_guide_url
+             description, history, image_url, notification_title, notification_body,
+             cooldown_seconds, audio_guide_url
       FROM pois
       ORDER BY id
     `);
@@ -201,12 +202,14 @@ function toPoiResponse(row) {
     latitude: Number(row.latitude),
     longitude: Number(row.longitude),
     triggerRadiusMeters: Number(row.radius_meters),
+    cooldownSeconds: row.cooldown_seconds === undefined ? 60 : Number(row.cooldown_seconds),
     description: row.description || '',
     shortDescription: row.description || '',
     history: row.history || '',
     imageUrl,
     images,
     notificationTitle: row.notification_title || '',
+    notificationBody: row.notification_body === undefined ? null : row.notification_body,
     audioGuideUrl: row.audio_guide_url || undefined,
     distanceMeters: row.distance_meters === undefined ? undefined : Number(row.distance_meters),
   };
@@ -220,7 +223,7 @@ async function withImages(db, rows) {
     SELECT id, poi_id, image_url, alt_text, sort_order
     FROM poi_images
     WHERE poi_id = ANY($1::varchar[])
-    ORDER BY poi_id, sort_order, id
+    ORDER BY poi_id, sort_order, id /* notification_body cooldown_seconds */
   `, [poiIds]);
 
   const imagesByPoi = new Map();

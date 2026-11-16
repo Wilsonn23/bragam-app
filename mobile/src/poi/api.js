@@ -1,14 +1,22 @@
 const { adaptPois } = require('./adapter');
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000';
-/** @param {{signal?:AbortSignal, fetchImpl?:typeof fetch, baseUrl?:string}} [options] */
+
+const API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000').replace(/\/+$/, '');
+
 async function fetchPois({ signal, fetchImpl = fetch, baseUrl = API_BASE_URL } = {}) {
-  const response = await fetchImpl(`${baseUrl.replace(/\/$/, '')}/api/pois`, { signal });
-  if (!response.ok) throw new Error(`Gagal mengambil destinasi (${response.status}).`);
-  const rows = await response.json();
-  if (!Array.isArray(rows)) throw new Error('Format data destinasi tidak valid.');
-  const records = adaptPois(rows);
-  if (records.length !== rows.length) throw new Error('Data destinasi memuat baris tidak valid atau ID duplikat.');
-  return records;
+  const controller = new AbortController();
+  const requestSignal = signal || controller.signal;
+  const timeout = signal ? null : setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetchImpl(`${baseUrl.replace(/\/+$/, '')}/api/pois`, { signal: requestSignal });
+    if (!response.ok) throw new Error(`Gagal mengambil POI (${response.status}).`);
+    const records = await response.json();
+    if (!Array.isArray(records)) throw new Error('Respons POI tidak valid.');
+    const pois = adaptPois(records);
+    if (records.length > 0 && pois.length === 0) throw new Error('Data POI tidak valid.');
+    return pois;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 async function fetchPoiImages(id) {

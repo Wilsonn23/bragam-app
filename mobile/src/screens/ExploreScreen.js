@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,47 +10,255 @@ import {
   PanResponder,
   Dimensions,
   Platform,
+  Alert,
 } from 'react-native';
-import MapView, { Marker, Polygon, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, {
+  Marker,
+  Polygon,
+  Polyline,
+  PROVIDER_GOOGLE,
+} from 'react-native-maps';
+import * as Location from 'expo-location';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
-import { PoiDetailFooter } from '../components/PoiCardComponents';
+import { WireframeImageBox, PoiDetailFooter } from '../components/PoiCardComponents';
 import PoiImageGallery from '../components/PoiImageGallery';
-import { validCoordinate } from '../location/distance';
 import SearchPoiOverlay from '../components/SearchPoiOverlay';
 import {
   BRAGA_REGION,
+  BRAGA_POIS,
   BRAGA_ZONE_POLYGON,
-  BRAGA_PURPLE_MAP_STYLE,
+  BRAGA_GRAY_MAP_STYLE,
 } from '../constants/bragaMapData';
+import { useAppActive, useForegroundLocation } from '../hooks/useForegroundLocation';
+
+// Sesuaikan IP komputer & PORT dengan yang ada di backend/.env
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 275;
 const EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.78;
 
+const TIME_OPTIONS = [
+  { label: 'All Time', value: 'Semua' },
+  { label: 'Morning (Pagi)', value: 'pagi' },
+  { label: 'Afternoon (Siang)', value: 'siang' },
+  { label: 'Night (Malam)', value: 'malam' },
+];
+
+const ENV_OPTIONS = [
+  { label: 'All Area', value: 'Semua' },
+  { label: 'Indoor', value: 'indoor' },
+  { label: 'Outdoor', value: 'outdoor' },
+  { label: 'Both', value: 'both' },
+];
+
+const RATING_OPTIONS = [
+  { label: 'All Rating', value: '0' },
+  { label: '1+ ★', value: '1' },
+  { label: '2+ ★', value: '2' },
+  { label: '3+ ★', value: '3' },
+  { label: '4+ ★', value: '4' },
+];
+
+// Mengecek apakah titik GPS pengguna berada di dalam poligon ungu Jl. Braga (Ray-Casting)
+function isPointInPolygon(point, polygon) {
+  if (!point || !Array.isArray(polygon) || polygon.length < 3) return false;
+  const { latitude: x, longitude: y } = point;
+  let inside = false;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].latitude;
+    const yi = polygon[i].longitude;
+    const xj = polygon[j].latitude;
+    const yj = polygon[j].longitude;
+
+    const intersect =
+      yi > y !== yj > y &&
+      x < ((xj - xi) * (y - yi)) / (yj - yi + Number.EPSILON) + xi;
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+}
+
+function normalizePoiItem(item) {
+  const localMeta = BRAGA_POIS.find((b) => b.id === item.id);
+  const lat = Number(
+    item.coordinate?.latitude ?? item.latitude ?? item.lat ?? localMeta?.latitude
+  );
+  const lng = Number(
+    item.coordinate?.longitude ?? item.longitude ?? item.lng ?? localMeta?.longitude
+  );
+
+  return {
+    ...localMeta,
+    ...item,
+    latitude: lat,
+    longitude: lng,
+    coordinate: {
+      latitude: Number.isFinite(lat) ? lat : BRAGA_REGION.latitude,
+      longitude: Number.isFinite(lng) ? lng : BRAGA_REGION.longitude,
+    },
+    rating: item.rating == null ? 'Belum tersedia' : String(item.rating),
+    distance: Number.isFinite(item.distanceMeters) ? `${Math.round(item.distanceMeters)} m` : 'Jarak belum tersedia',
+  };
+}
+
 export default function ExploreScreen({
+  windowShrink = 0,
+  pois = [],
+  bookmarkedPois = [],
   onOpenDetail,
   onOpenDirections,
-  pois,
-  sample,
-  statusContent,
+  onOpenBookmarks,
+  onToggleSave,
+  onAddToItinerary,
+  onSimulateGeofence,
 }) {
   const mapRef = useRef(null);
   const [activeSegment, setActiveSegment] = useState('nearby'); // 'nearby' | 'recommendation'
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // State koordinat GPS dari MapView / expo-location sebagai cadangan cepat
+  const [mapUserCoord, setMapUserCoord] = useState(null);
+
+  // Baca GPS perangkat melalui hook foreground
+  const isAppActive = useAppActive();
+  const locationState = useForegroundLocation(isAppActive);
+  const hookCoords =
+    locationState?.sample ||
+    locationState?.location?.coords ||
+    locationState?.coords ||
+    locationState?.location ||
+    locationState;
+
+  // Ambil posisi terakhir / posisi cepat saat layar dibuka agar tidak menunggu lama
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted' || !isMounted) return;
+
+        const lastKnown = await Location.getLastKnownPositionAsync();
+        if (lastKnown?.coords && isMounted) {
+          setMapUserCoord({
+            latitude: lastKnown.coords.latitude,
+            longitude: lastKnown.coords.longitude,
+          });
+        }
+
+        const current = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (current?.coords && isMounted) {
+          setMapUserCoord({
+            latitude: current.coords.latitude,
+            longitude: current.coords.longitude,
+          });
+        }
+      } catch (_) {}
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Gabungkan sumber koordinat terbaik (hook -> MapView -> expo-location)
+  const resolvedUserCoord = useMemo(() => {
+    const hLat = Number(hookCoords?.latitude);
+    const hLng = Number(hookCoords?.longitude);
+    if (Number.isFinite(hLat) && Number.isFinite(hLng)) {
+      return { latitude: hLat, longitude: hLng };
+    }
+    if (
+      mapUserCoord &&
+      Number.isFinite(mapUserCoord.latitude) &&
+      Number.isFinite(mapUserCoord.longitude)
+    ) {
+      return mapUserCoord;
+    }
+    return null;
+  }, [hookCoords?.latitude, hookCoords?.longitude, mapUserCoord]);
+
+  const isOutsideBragaZone = useMemo(() => {
+    if (!resolvedUserCoord) return false;
+    return !isPointInPolygon(resolvedUserCoord, BRAGA_ZONE_POLYGON);
+  }, [resolvedUserCoord]);
+
+  // State 4 Dropdown Filter pada Bottom Sheet
+  const [categoryOptions, setCategoryOptions] = useState([
+    { label: 'Category', value: 'Semua' },
+  ]);
+  const [selectedCategory, setSelectedCategory] = useState('Semua');
+  const [selectedTime, setSelectedTime] = useState('Semua');
+  const [selectedEnv, setSelectedEnv] = useState('Semua');
+  const [selectedRating, setSelectedRating] = useState('0');
+  const [openDropdown, setOpenDropdown] = useState(null);
+  const [sheetPois, setSheetPois] = useState([]);
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/categories`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (Array.isArray(json.categories) && json.categories.length > 0) {
+          setCategoryOptions(
+            json.categories.map((cat) => ({
+              label: cat === 'Semua' ? 'Category' : cat,
+              value: cat,
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams({
+      q: '',
+      category: selectedCategory,
+      time_category: selectedTime,
+      environment: selectedEnv,
+      min_rating: selectedRating,
+    });
+
+    fetch(`${API_BASE_URL}/api/pois/search?${params.toString()}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (Array.isArray(json.data) && json.data.length > 0) {
+          setSheetPois(json.data.map(normalizePoiItem));
+        } else if (Array.isArray(json.data)) {
+          setSheetPois([]);
+        }
+      })
+      .catch(() => {});
+  }, [selectedCategory, selectedTime, selectedEnv, selectedRating]);
+
   const [sheetHeight] = useState(() => new Animated.Value(COLLAPSED_HEIGHT));
-  const currentHeightRef = useRef(COLLAPSED_HEIGHT);
+  const [currentHeight, setCurrentHeight] = useState(COLLAPSED_HEIGHT);
 
   const handleRecenterBraga = () => {
     mapRef.current?.animateToRegion(BRAGA_REGION, 600);
   };
 
+  const handlePressAddItinerary = (poi) => {
+    if (onAddToItinerary) {
+      onAddToItinerary(poi);
+    } else {
+      Alert.alert(
+        'Ditambahkan ke Itinerary',
+        `${poi.name} berhasil ditambahkan ke rencana perjalananmu.`
+      );
+    }
+  };
+
   const animateSheet = (toExpanded) => {
     const target = toExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
     setIsExpanded(toExpanded);
-    currentHeightRef.current = target;
+    setCurrentHeight(target);
     Animated.spring(sheetHeight, {
       toValue: target,
       useNativeDriver: false,
@@ -58,12 +266,11 @@ export default function ExploreScreen({
     }).start();
   };
 
-  // eslint-disable-next-line react-hooks/refs -- PanResponder stores gesture callbacks; ref reads occur only when those callbacks run.
-  const [panResponder] = useState(() =>
+  const panResponder = useMemo(() =>
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
       onPanResponderMove: (_, gesture) => {
-        const nextHeight = currentHeightRef.current - gesture.dy;
+        const nextHeight = currentHeight - gesture.dy;
         if (nextHeight >= COLLAPSED_HEIGHT - 20 && nextHeight <= EXPANDED_HEIGHT + 20) {
           sheetHeight.setValue(nextHeight);
         }
@@ -74,87 +281,212 @@ export default function ExploreScreen({
         } else if (gesture.dy > 40) {
           animateSheet(false);
         } else {
-          animateSheet(currentHeightRef.current > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
+          animateSheet(currentHeight > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
         }
       },
     })
+  , [currentHeight, sheetHeight]);
+
+  const getDropdownConfig = () => {
+    switch (openDropdown) {
+      case 'category':
+        return {
+          title: 'Select Category',
+          options: categoryOptions,
+          value: selectedCategory,
+          onSelect: setSelectedCategory,
+        };
+      case 'time':
+        return {
+          title: 'Select Time',
+          options: TIME_OPTIONS,
+          value: selectedTime,
+          onSelect: setSelectedTime,
+        };
+      case 'env':
+        return {
+          title: 'Select Environment',
+          options: ENV_OPTIONS,
+          value: selectedEnv,
+          onSelect: setSelectedEnv,
+        };
+      case 'rating':
+        return {
+          title: 'Minimum Rating',
+          options: RATING_OPTIONS,
+          value: selectedRating,
+          onSelect: setSelectedRating,
+        };
+      default:
+        return null;
+    }
+  };
+
+  const getPillLabel = (options, value, fallback) => {
+    if (value === 'Semua' || value === '0') return fallback;
+    return options.find((o) => o.value === value)?.label || fallback;
+  };
+
+  const renderFilterPill = (key, label, isActive) => (
+    <TouchableOpacity
+      key={key}
+      activeOpacity={0.85}
+      onPress={() => setOpenDropdown(key)}
+      style={[styles.filterPill, isActive && styles.filterPillActive]}
+    >
+      <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
+        {label}
+      </Text>
+      <View style={[styles.filterChevronCircle, isActive && styles.filterChevronCircleActive]}>
+        <Ionicons
+          name="chevron-down"
+          size={12}
+          color={isActive ? COLORS.darkPurple : COLORS.white}
+        />
+      </View>
+    </TouchableOpacity>
   );
+
+  const activeDropdown = getDropdownConfig();
+
+  const hasActiveFilter =
+    selectedCategory !== 'Semua' ||
+    selectedTime !== 'Semua' ||
+    selectedEnv !== 'Semua' ||
+    selectedRating !== '0';
+
+  const fallbackPois = (Array.isArray(pois) ? pois : []).map(
+    normalizePoiItem
+  );
+
+  const displayPois = hasActiveFilter
+    ? sheetPois
+    : sheetPois.length > 0
+    ? sheetPois
+    : fallbackPois;
 
   return (
     <View style={styles.root}>
-      {/* Google Maps Canvas */}
+      {/* Google Maps / Apple Maps Canvas */}
       <View style={styles.mapCanvas}>
         <MapView
           ref={mapRef}
           provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           style={StyleSheet.absoluteFill}
           initialRegion={BRAGA_REGION}
-          customMapStyle={BRAGA_PURPLE_MAP_STYLE}
-          showsUserLocation={false}
+          customMapStyle={Platform.OS === 'android' ? BRAGA_GRAY_MAP_STYLE : undefined}
+          userInterfaceStyle="light"
+          showsUserLocation={true}
           showsMyLocationButton={false}
           showsCompass={false}
+          onUserLocationChange={(event) => {
+            const coord = event?.nativeEvent?.coordinate;
+            if (
+              coord &&
+              Number.isFinite(coord.latitude) &&
+              Number.isFinite(coord.longitude)
+            ) {
+              setMapUserCoord({
+                latitude: coord.latitude,
+                longitude: coord.longitude,
+              });
+            }
+          }}
         >
+          {/* Highlight Blok Ungu Transparan Khusus Koridor Jl. Braga */}
           <Polygon
             coordinates={BRAGA_ZONE_POLYGON}
-            fillColor="rgba(91, 43, 191, 0.12)"
+            fillColor="rgba(126, 87, 194, 0.24)"
+            strokeWidth={0}
+          />
+
+          {/* Garis Batas Putus-Putus Mengelilingi Zona Jl. Braga */}
+          <Polyline
+            coordinates={[...BRAGA_ZONE_POLYGON, BRAGA_ZONE_POLYGON[0]]}
             strokeColor={COLORS.primaryPurple}
             strokeWidth={3}
+            lineDashPattern={[10, 8]}
           />
-          {validCoordinate(sample) &&
-            <Marker coordinate={{ latitude: sample.latitude, longitude: sample.longitude }} title="Posisi pengguna" pinColor={COLORS.primaryPurple} />}
-          {pois.map((poi) => (
-            <Marker
-              key={poi.id}
-              coordinate={{ latitude: poi.latitude, longitude: poi.longitude }}
-              onPress={() => {
-                mapRef.current?.animateToRegion(
-                  {
-                    latitude: poi.latitude, longitude: poi.longitude,
-                    latitudeDelta: 0.004,
-                    longitudeDelta: 0.004,
-                  },
-                  400
-                );
-              }}
-            >
-              <View style={styles.customMarkerRow}>
-                <View style={styles.teardropPin}>
-                  <View style={styles.pinInnerHole} />
+
+          {/* Marker POI di Jl. Braga (ditekan langsung membuka Detail POI) */}
+          {displayPois.map((poi) => {
+            const lat = Number(
+              poi.coordinate?.latitude ?? poi.latitude ?? poi.lat
+            );
+            const lng = Number(
+              poi.coordinate?.longitude ?? poi.longitude ?? poi.lng
+            );
+
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+            return (
+              <Marker
+                key={String(poi.id)}
+                coordinate={{ latitude: lat, longitude: lng }}
+                onPress={() => onOpenDetail?.(poi)}
+              >
+                <View style={styles.customMarkerRow}>
+                  <View style={styles.teardropPin}>
+                    <View style={styles.pinInnerHole} />
+                  </View>
+                  <View style={styles.markerLabelBadge}>
+                    <Text style={styles.mapLabelText}>{poi.name}</Text>
+                  </View>
                 </View>
-                <View style={styles.markerLabelBadge}>
-                  <Text style={styles.mapLabelText}>{poi.name}</Text>
-                </View>
-              </View>
-            </Marker>
-          ))}
+              </Marker>
+            );
+          })}
         </MapView>
 
-        {/* Top Search Bar Trigger */}
-        <SafeAreaView style={styles.topOverlay}>
-          <View style={styles.searchRow}>
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => setIsSearchOpen(true)}
-              style={styles.searchInputBox}
-            >
-              <Text style={styles.searchPlaceholder}>Type Something...</Text>
-              <Ionicons name="search" size={20} color={COLORS.darkPurple} />
-            </TouchableOpacity>
+        {/* Top Floating Bar: Bubble Info Luar Zona + Tombol Search & Bookmark */}
+        <SafeAreaView style={styles.topOverlay} pointerEvents="box-none">
+          <View style={styles.topActionRow} pointerEvents="box-none">
+            {isOutsideBragaZone && (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={handleRecenterBraga}
+                style={styles.outsideZoneBubble}
+              >
+                <Ionicons
+                  name="information-circle"
+                  size={18}
+                  color={COLORS.darkPurple}
+                />
+                <Text style={styles.outsideZoneText} numberOfLines={2}>
+                  Kamu berada di luar area Jl. Braga
+                </Text>
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="Bookmark"
-              style={styles.bookmarkCircleBtn}
-            >
-              <Ionicons name="bookmark" size={20} color={COLORS.darkPurple} />
-            </TouchableOpacity>
+            <View style={styles.rightButtonsGroup}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => setIsSearchOpen(true)}
+                style={styles.circleActionBtn}
+              >
+                <Ionicons name="search" size={20} color={COLORS.darkPurple} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={onOpenBookmarks}
+                onLongPress={onSimulateGeofence}
+                style={styles.circleActionBtn}
+              >
+                <Ionicons name="bookmark" size={20} color={COLORS.darkPurple} />
+              </TouchableOpacity>
+            </View>
           </View>
         </SafeAreaView>
       </View>
 
       {/* Draggable Bottom Sheet (Nearby You & Contextual Recommendation) */}
-      <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
+      <Animated.View
+        style={[
+          styles.bottomSheet,
+          { height: sheetHeight, bottom: -windowShrink },
+        ]}
+      >
         {/* Floating Recenter Button above sheet */}
         <TouchableOpacity
           activeOpacity={0.85}
@@ -220,71 +552,148 @@ export default function ExploreScreen({
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filterRow}
             >
-              <TouchableOpacity style={styles.filterIconBtn}>
+              <TouchableOpacity
+                style={styles.filterIconBtn}
+                onPress={() => {
+                  setSelectedCategory('Semua');
+                  setSelectedTime('Semua');
+                  setSelectedEnv('Semua');
+                  setSelectedRating('0');
+                }}
+              >
                 <Ionicons name="options" size={20} color={COLORS.primaryPurple} />
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.filterPill}>
-                <Text style={styles.filterPillText}>Destination</Text>
-                <View style={styles.filterChevronCircle}>
-                  <Ionicons name="chevron-down" size={12} color={COLORS.white} />
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.filterPill}>
-                <Text style={styles.filterPillText}>Open at Night</Text>
-                <View style={styles.filterChevronCircle}>
-                  <Ionicons name="chevron-down" size={12} color={COLORS.white} />
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.filterPill}>
-                <Text style={styles.filterPillText}>Top Rated</Text>
-              </TouchableOpacity>
+              {renderFilterPill(
+                'category',
+                getPillLabel(categoryOptions, selectedCategory, 'Category'),
+                selectedCategory !== 'Semua'
+              )}
+              {renderFilterPill(
+                'time',
+                getPillLabel(TIME_OPTIONS, selectedTime, 'Time'),
+                selectedTime !== 'Semua'
+              )}
+              {renderFilterPill(
+                'env',
+                getPillLabel(ENV_OPTIONS, selectedEnv, 'Environment'),
+                selectedEnv !== 'Semua'
+              )}
+              {renderFilterPill(
+                'rating',
+                getPillLabel(RATING_OPTIONS, selectedRating, 'Rating'),
+                selectedRating !== '0'
+              )}
             </ScrollView>
           )}
         </View>
 
         {/* Scrollable POI Cards List */}
         <ScrollView
+          style={{ flex: 1 }}
+          nestedScrollEnabled={true}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.cardsScrollContent}
         >
-          {statusContent}
-          {pois.map((poi, idx) => (
-            <View
-              key={`${activeSegment}-${poi.id}`}
-              style={[
-                styles.poiCardSection,
-                idx !== pois.length - 1 && styles.poiCardDivider,
-              ]}
-            >
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.carouselRow}
-              >
-                <PoiImageGallery poi={poi} compact />
-              </ScrollView>
+          {displayPois.map((poi, idx) => {
+            const isPoiSaved = bookmarkedPois.some(
+              (item) =>
+                (poi.id && String(item.id) === String(poi.id)) ||
+                item.name?.toLowerCase() === poi.name?.toLowerCase()
+            );
 
-              <View style={{ paddingHorizontal: 20 }}>
-                <PoiDetailFooter
-                  name={poi.name}
-                  distance={poi.distance}
-                  rating={poi.rating}
-                  onCheckDetail={() => onOpenDetail?.(poi)}
-                  onDirections={() => onOpenDirections?.(poi)}
-                />
+            return (
+              <View
+                key={`${activeSegment}-${poi.id}`}
+                style={[
+                  styles.poiCardSection,
+                  idx !== displayPois.length - 1 && styles.poiCardDivider,
+                ]}
+              >
+                <ScrollView
+                  horizontal
+                  nestedScrollEnabled={true}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.carouselRow}
+                >
+                  <PoiImageGallery poi={poi} compact />
+                </ScrollView>
+
+                <View style={{ paddingHorizontal: 20 }}>
+                  <PoiDetailFooter
+                    name={poi.name}
+                    distance={poi.distance || `${poi.triggerRadiusMeters || 10}m`}
+                    rating={poi.rating}
+                    isSaved={isPoiSaved}
+                    onCheckDetail={() => onOpenDetail?.(poi)}
+                    onDirections={() => onOpenDirections?.(poi)}
+                    onSave={() => onToggleSave?.(poi)}
+                    onAddToItinerary={() => handlePressAddItinerary(poi)}
+                  />
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </ScrollView>
       </Animated.View>
 
-      {/* Search POI Overlay */}
+      {/* Dropdown Picker Overlay untuk Filter Bottom Sheet */}
+      {activeDropdown && (
+        <TouchableOpacity
+          style={styles.dropdownBackdrop}
+          activeOpacity={1}
+          onPress={() => setOpenDropdown(null)}
+        >
+          <View style={styles.dropdownSheet} onStartShouldSetResponder={() => true}>
+            <View style={styles.dropdownSheetHeader}>
+              <Text style={styles.dropdownSheetTitle}>{activeDropdown.title}</Text>
+              <TouchableOpacity onPress={() => setOpenDropdown(null)}>
+                <Ionicons name="close" size={22} color={COLORS.darkPurple} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 280 }}>
+              {activeDropdown.options.map((opt) => {
+                const isSelected = opt.value === activeDropdown.value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      styles.dropdownOptionRow,
+                      isSelected && styles.dropdownOptionRowSelected,
+                    ]}
+                    onPress={() => {
+                      activeDropdown.onSelect(opt.value);
+                      setOpenDropdown(null);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownOptionText,
+                        isSelected && styles.dropdownOptionTextSelected,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                    {isSelected && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color={COLORS.darkPurple}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      {/* Search POI Slider */}
       <SearchPoiOverlay
-        pois={pois}
         visible={isSearchOpen}
+        windowShrink={windowShrink}
         onClose={() => setIsSearchOpen(false)}
         onSelectPoi={(poi) => onOpenDetail?.(poi)}
       />
@@ -295,41 +704,57 @@ export default function ExploreScreen({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#E5DAF7',
+    backgroundColor: '#EAEAEA',
   },
   mapCanvas: {
     flex: 1,
-    backgroundColor: '#DDD0F4',
+    backgroundColor: '#EAEAEA',
     position: 'relative',
   },
   topOverlay: {
-    zIndex: 10,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
   },
-  searchRow: {
+  topActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: Platform.OS === 'android' ? 44 : 12,
     gap: 10,
   },
-  searchInputBox: {
+  outsideZoneBubble: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: COLORS.white,
     borderWidth: 2,
     borderColor: COLORS.primaryPurple,
     borderRadius: RADIUS.pill,
-    paddingHorizontal: 16,
-    height: 46,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.14,
+    shadowRadius: 4,
   },
-  searchPlaceholder: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-    fontStyle: 'italic',
+  outsideZoneText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.darkPurple,
   },
-  bookmarkCircleBtn: {
+  rightButtonsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  circleActionBtn: {
     width: 46,
     height: 46,
     borderRadius: 23,
@@ -338,6 +763,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primaryPurple,
     alignItems: 'center',
     justifyContent: 'center',
+    elevation: 4,
   },
   customMarkerRow: {
     flexDirection: 'row',
@@ -451,6 +877,7 @@ const styles = StyleSheet.create({
   filterPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: COLORS.white,
     borderWidth: 1.5,
     borderColor: COLORS.mediumPurple,
     borderRadius: RADIUS.pill,
@@ -459,10 +886,17 @@ const styles = StyleSheet.create({
     paddingRight: 6,
     gap: 6,
   },
+  filterPillActive: {
+    backgroundColor: COLORS.darkPurple,
+    borderColor: COLORS.darkPurple,
+  },
   filterPillText: {
     fontSize: 12,
     color: COLORS.primaryPurple,
     fontWeight: '500',
+  },
+  filterPillTextActive: {
+    color: COLORS.white,
   },
   filterChevronCircle: {
     width: 18,
@@ -471,6 +905,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.darkPurple,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  filterChevronCircleActive: {
+    backgroundColor: COLORS.white,
   },
   cardsScrollContent: {
     paddingBottom: 24,
@@ -485,5 +922,52 @@ const styles = StyleSheet.create({
   carouselRow: {
     paddingHorizontal: 20,
     gap: 10,
+  },
+  dropdownBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(49, 20, 101, 0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    zIndex: 50,
+  },
+  dropdownSheet: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1.5,
+    borderColor: COLORS.primaryPurple,
+    padding: 16,
+  },
+  dropdownSheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderSubtle,
+    marginBottom: 6,
+  },
+  dropdownSheetTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  dropdownOptionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    borderRadius: RADIUS.sm,
+  },
+  dropdownOptionRowSelected: {
+    backgroundColor: COLORS.lavenderTint,
+  },
+  dropdownOptionText: {
+    fontSize: 14,
+    color: COLORS.textPrimary,
+  },
+  dropdownOptionTextSelected: {
+    fontWeight: '700',
+    color: COLORS.darkPurple,
   },
 });

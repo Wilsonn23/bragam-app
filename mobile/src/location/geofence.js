@@ -54,7 +54,7 @@ class GeofenceController {
         if (visit.inside && !visit.triggered) {
           // Consume this entry even when cooldown suppresses it. Time alone never emits.
           visit.triggered = true;
-          if (now - visit.lastTriggerAt >= poi.cooldownSeconds * 1000) {
+          if (now - visit.lastTriggerAt >= (poi.cooldownSeconds ?? 60) * 1000) {
             visit.lastTriggerAt = now;
             events.push({ poi, poiId: poi.id, visitId: visit.visitId, distanceMeters: distance });
           }
