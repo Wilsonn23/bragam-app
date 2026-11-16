@@ -202,6 +202,10 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.lavenderTint,
   },
+  firstPlaceholder: {
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.lavenderTint,
+  },
   empty: {
     height: 232,
     borderRadius: RADIUS.md,

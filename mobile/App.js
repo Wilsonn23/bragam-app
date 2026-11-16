@@ -8,6 +8,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import ExploreScreen from './src/screens/ExploreScreen';
 import TripScreen from './src/screens/TripScreen';
 import AccountScreen from './src/screens/AccountScreen';
+import LoginScreen from './src/screens/LoginScreen';
 import PoiDetailScreen from './src/screens/PoiDetailScreen';
 import NavigationScreen from './src/screens/NavigationScreen';
 import TripRouteSummaryScreen from './src/screens/TripRouteSummaryScreen';
@@ -15,6 +16,7 @@ import BookmarkScreen from './src/screens/BookmarkScreen';
 import { COLORS } from './src/components/theme';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState('Home');
 
   // Sub-screens state: null | 'PoiDetail' | 'Navigation' | 'TripSummary' | 'Bookmark'
@@ -112,6 +114,10 @@ export default function App() {
   const windowShrink =
     fullHeight > 0 && currentHeight > 0 ? Math.max(0, fullHeight - currentHeight) : 0;
 
+  if (!currentUser) {
+    return <LoginScreen onLogin={setCurrentUser} />;
+  }
+
   const handleOpenDetail = (poi) => {
     setSelectedPoi(poi);
     setSubScreen('PoiDetail');
@@ -121,6 +127,12 @@ export default function App() {
     setSelectedPoi(poi);
     setActiveTab('Explore');
     setSubScreen('Navigation');
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setSubScreen(null);
+    setActiveTab('Home');
   };
 
   const handleOpenBookmarks = () => {
@@ -217,7 +229,7 @@ export default function App() {
       case 'Trip':
         return <TripScreen onUseTrip={handleUseTrip} />;
       case 'Account':
-        return <AccountScreen />;
+        return <AccountScreen user={currentUser} onLogout={handleLogout} />;
       default:
         return <HomeScreen pois={pois} />;
     }

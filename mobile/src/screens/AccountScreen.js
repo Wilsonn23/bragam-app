@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
+  Animated,
+  PanResponder,
   View,
   Text,
   TouchableOpacity,
@@ -10,7 +12,28 @@ import Svg, { Line } from 'react-native-svg';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 
-export default function AccountScreen() {
+export default function AccountScreen({ user, onLogout }) {
+  const displayName = user?.name || user?.email?.split('@')[0] || 'Pengguna BRAGAm';
+  const sheetOffset = useMemo(() => new Animated.Value(0), []);
+  const panResponder = useMemo(
+    () => PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
+      onPanResponderMove: (_, gesture) => {
+        sheetOffset.setValue(Math.max(0, Math.min(180, gesture.dy)));
+      },
+      onPanResponderRelease: (_, gesture) => {
+        const target = gesture.dy > 80 ? 180 : 0;
+        Animated.spring(sheetOffset, {
+          toValue: target,
+          useNativeDriver: true,
+          tension: 55,
+          friction: 9,
+        }).start();
+      },
+    }),
+    [sheetOffset]
+  );
+
   return (
     <View style={styles.root}>
       {/* Upper Purple Profile Section */}
@@ -44,10 +67,8 @@ export default function AccountScreen() {
           </Svg>
         </View>
 
-        <Text style={styles.userName}>Favian</Text>
-        <Text style={styles.visitCounterText}>
-          6 Destinasi Braga Telah Kamu Kunjungi!
-        </Text>
+        <Text style={styles.userName}>{displayName}</Text>
+        <Text style={styles.userEmail}>{user?.email || 'Email belum tersedia'}</Text>
 
         <TouchableOpacity activeOpacity={0.85} style={styles.historyPillBtn}>
           <Text style={styles.historyPillText}>Lihat Histori Kunjungan</Text>
@@ -61,8 +82,12 @@ export default function AccountScreen() {
       </SafeAreaView>
 
       {/* Bottom Sheet Settings Menu */}
-      <View style={styles.bottomSheet}>
-        <View style={styles.dragHandle} />
+      <Animated.View
+        style={[styles.bottomSheet, { transform: [{ translateY: sheetOffset }] }]}
+      >
+        <View {...panResponder.panHandlers} style={styles.dragHandleTouch}>
+          <View style={styles.dragHandle} />
+        </View>
 
         {/* Menu Item 1: Ganti Password */}
         <TouchableOpacity activeOpacity={0.75} style={styles.menuRow}>
@@ -86,7 +111,11 @@ export default function AccountScreen() {
 
         {/* Spacer + Keluar Akun Button */}
         <View style={styles.logoutWrapper}>
-          <TouchableOpacity activeOpacity={0.85} style={styles.logoutBtn}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={onLogout}
+            style={styles.logoutBtn}
+          >
             <Text style={styles.logoutText}>Keluar Akun</Text>
             <MaterialCommunityIcons
               name="exit-to-app"
@@ -96,7 +125,7 @@ export default function AccountScreen() {
             />
           </TouchableOpacity>
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -149,9 +178,9 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     marginBottom: 4,
   },
-  visitCounterText: {
+  userEmail: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
     color: COLORS.white,
     marginBottom: 12,
   },
@@ -169,7 +198,12 @@ const styles = StyleSheet.create({
     color: COLORS.primaryPurple,
   },
   bottomSheet: {
-    flex: 1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '52%',
+    maxHeight: 380,
     backgroundColor: COLORS.softLilacBg,
     borderTopLeftRadius: RADIUS.sheet,
     borderTopRightRadius: RADIUS.sheet,
@@ -182,6 +216,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.lavenderTint,
     alignSelf: 'center',
     marginBottom: 10,
+  },
+  dragHandleTouch: {
+    alignItems: 'center',
+    paddingVertical: 8,
   },
   menuRow: {
     flexDirection: 'row',

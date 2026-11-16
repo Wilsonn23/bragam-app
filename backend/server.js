@@ -3,6 +3,7 @@ const cors = require('cors');
 const { Pool } = require('pg');
 const swaggerUi = require('swagger-ui-express');
 const usersRouter = require('./routes/users');
+const authRouter = require('./routes/auth');
 const poisRouter = require('./routes/pois');
 const openapiSpec = require('./openapi');
 require('dotenv').config();
@@ -42,6 +43,7 @@ app.get('/health', (req, res) => {
 
 app.use('/api', poisRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/auth', authRouter);
 
 const PORT = process.env.PORT || 5000;
 app.use((error, req, res, next) => {
