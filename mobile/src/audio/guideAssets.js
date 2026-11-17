@@ -12,7 +12,6 @@ export const POI_AUDIO_ASSETS = {
   P10: { name: 'Galeri Seni / Lukisan Jalan Braga', source: require('../../assets/audio/poi10.mp3') },
   P11: { name: 'Braga CityWalk', source: require('../../assets/audio/poi11.mp3') },
   P12: { name: 'Braga Sky 1957', source: require('../../assets/audio/poi12.mp3') },
-  ...(__DEV__ ? {
-    'TEST-LOCAL': { name: 'Braga CityWalk (Uji Lokal)', source: require('../../assets/audio/poi11.mp3') },
-  } : {}),
+  // Shared GPS test POI uses the existing CityWalk recording in every build.
+  'TEST-LOCAL': { name: 'Braga CityWalk (Uji GPS)', source: require('../../assets/audio/poi11.mp3') },
 };

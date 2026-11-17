@@ -19,13 +19,16 @@ function localTestPoi(env = process.env) {
 async function loadLocalTestPoi(db, env = process.env) {
   const configured = localTestPoi(env);
   if (!configured) return null;
+  // A persisted test POI is authoritative, including when old local flags remain enabled.
+  const { rows: persisted } = await db.query('SELECT id FROM public.pois WHERE id = $1 LIMIT 1', [configured.id]);
+  if (persisted.length) return null;
   const sourceId = env.LOCAL_TEST_POI_SOURCE_ID?.trim();
   if (!sourceId) return configured;
   if (sourceId === configured.id) throw Object.assign(new Error('Invalid local POI source'), { code: 'LOCAL_POI_SOURCE_INVALID' });
   const { rows } = await db.query('SELECT * FROM public.pois WHERE id = $1 LIMIT 1', [sourceId]);
   if (rows.length !== 1) throw Object.assign(new Error('Local POI source not found'), { code: 'LOCAL_POI_SOURCE_MISSING' });
   const source = rows[0];
-  return { ...source, id: configured.id, name: `${source.name} (Uji Lokal)`,
+  return { ...source, id: configured.id, name: `${source.name} (Uji GPS)`,
     latitude: configured.latitude, longitude: configured.longitude, location: undefined,
     source_poi_id: source.id, is_local_test: true };
 }

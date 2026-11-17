@@ -210,7 +210,28 @@ Response berhasil: `204 No Content`.
 | `409` | Email sudah terdaftar |
 | `500` | Query database gagal |
 
-## POI uji coba lokal
+## POI uji GPS bersama
+
+Database bersama memiliki salinan **Braga CityWalk (Uji GPS)** dengan ID `TEST-LOCAL`
+di koordinat `-6.890389, 107.609583`. POI ini menyalin metadata, radius/cooldown,
+dan foto CityWalk `P11`; POI asli tetap berada di koordinat aslinya. Rating, jam buka,
+alamat, sejarah, dan deskripsi adalah salinan data CityWalk, bukan informasi tempat
+nyata pada titik uji. Audio mobile memakai rekaman `poi11.mp3` pada development
+dan production. Pembaruan data P11 berikutnya tidak otomatis mengubah salinan.
+
+Data ditambahkan melalui `backend/seeds/shared-citywalk-gps.sql` secara eksplisit,
+bukan saat API startup. Script transaksional ini dapat dijalankan ulang tanpa
+menambah salinan POI/foto kedua, dan menolak ID yang sudah dipakai tempat berbeda.
+Script hanya menambah data: tidak mengubah schema, RLS, atau P11.
+
+Teman satu tim cukup memakai database backend yang sama, pull `main` terbaru,
+dan reload aplikasi agar katalog dimuat ulang. Tidak perlu mengaktifkan fixture
+lokal: gunakan `LOCAL_TEST_POI_ENABLED=false`. Endpoint katalog, search, nearby,
+detail, dan galeri memperlakukan `TEST-LOCAL` sebagai POI database biasa.
+Jika konfigurasi lokal lama masih aktif, record database tetap diprioritaskan
+sehingga nama, koordinat, foto, dan ID tidak ditimpa fixture lokal.
+
+## Fixture uji coba lokal opsional
 
 Untuk uji peta/Nearby, pencarian, detail, dan notifikasi GPS, isi `backend/.env`:
 
@@ -221,11 +242,11 @@ LOCAL_TEST_POI_LONGITUDE=107.609583
 LOCAL_TEST_POI_SOURCE_ID=P11
 ```
 
-Dengan `LOCAL_TEST_POI_SOURCE_ID=P11`, `TEST-LOCAL` menjadi **Braga CityWalk (Uji Lokal)**: metadata, radius, cooldown, rating, detail dan foto dibaca dari Citywalk asli (`P11`), sedangkan koordinat menggunakan konfigurasi uji di atas. POI asli tetap berada di koordinat aslinya. Salinan memakai URL foto yang sama tanpa membuat baris gambar baru. Endpoint katalog, kategori, pencarian/filter, nearby, detail dan galeri menerima ID salinan yang sama.
+Jika `TEST-LOCAL` belum tersimpan di database tersebut, dengan `LOCAL_TEST_POI_SOURCE_ID=P11`, fixture menjadi **Braga CityWalk (Uji GPS)**: metadata, radius, cooldown, rating, detail dan foto dibaca dari Citywalk asli (`P11`), sedangkan koordinat menggunakan konfigurasi uji di atas. POI asli tetap berada di koordinat aslinya. Fixture memakai URL foto yang sama tanpa membuat baris gambar baru. Endpoint katalog, kategori, pencarian/filter, nearby, detail dan galeri menerima ID fixture yang sama.
 
-Pada mobile development, audio `TEST-LOCAL` memakai rekaman `poi11.mp3` milik Citywalk; alias ini tidak aktif pada bundle produksi. Save dan Directions memakai handler POI yang sama dengan destinasi lain; itinerary tetap mengikuti ketersediaan integrasi aplikasi, bukan mengumumkan penyimpanan palsu.
+Audio `TEST-LOCAL` memakai rekaman `poi11.mp3` milik Citywalk pada semua build, dengan pencocokan ID dan nama. Save dan Directions memakai handler POI yang sama dengan destinasi lain; itinerary tetap mengikuti ketersediaan integrasi aplikasi, bukan mengumumkan penyimpanan palsu.
 
-Restart backend setelah mengubah konfigurasi, lalu reload aplikasi agar PoiProvider mengambil ulang katalog. Implementasi ini hanya menjalankan SELECT, tidak menambah/mengubah data POI di database bersama. Jika sumber P11 tidak tersedia, request gagal secara eksplisit dan tidak menggantinya dengan POI generik. Hapus `LOCAL_TEST_POI_SOURCE_ID` untuk memakai fixture generik yang sudah tersedia sebelumnya. `LOCAL_TEST_POI_ENABLED=false` menonaktifkan keduanya; mode production selalu menonaktifkannya.
+Restart backend setelah mengubah konfigurasi, lalu reload aplikasi agar PoiProvider mengambil ulang katalog. Fixture opsional hanya menjalankan SELECT dan tidak menulis database. Jika sumber P11 tidak tersedia, request gagal secara eksplisit dan tidak menggantinya dengan POI generik. Hapus `LOCAL_TEST_POI_SOURCE_ID` untuk memakai fixture generik. `LOCAL_TEST_POI_ENABLED=false` atau mode production menonaktifkan fixture opsional; keduanya tidak menyembunyikan POI bersama yang sudah tersimpan di database.
 
 Tanpa source ID, fixture generik bernama **POI Uji Coba Lokal** (`TEST-LOCAL`)
 memakai radius 15 meter dan cooldown 60 detik, tanpa foto/audio. POI lokal ini

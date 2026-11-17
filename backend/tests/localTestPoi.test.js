@@ -74,7 +74,10 @@ test('Citywalk clone keeps original data, gallery, audio identity and geofence b
   const images=[{id:1,poi_id:'P11',image_url:'https://example.test/citywalk.jpg',alt_text:'Citywalk',sort_order:0}];
   const db={query:async(sql,values=[])=>{
     assert.match(sql.trim(),/^SELECT\b/i);
-    if(sql.includes('FROM public.pois')){assert.deepEqual(values,['P11']);return {rows:[source]};}
+    if(sql.includes('FROM public.pois')){
+      if(values[0]==='TEST-LOCAL')return {rows:[]};
+      assert.deepEqual(values,['P11']);return {rows:[source]};
+    }
     if(sql.includes('FROM poi_images')){assert.ok(values[0]==='P11'||values[0].includes('P11'));return {rows:images};}
     if(sql.includes('SELECT DISTINCT'))return {rows:[{category:source.category}]};
     if(sql.includes('ST_DWithin'))return {rows:[]};
@@ -84,7 +87,7 @@ test('Citywalk clone keeps original data, gallery, audio identity and geofence b
   await new Promise(r=>server.once('listening',r));
   const get=async route=>{const r=await fetch(`http://127.0.0.1:${server.address().port}/api${route}`);assert.equal(r.status,200);return r.json();};
   const all=await get('/pois');const clone=all.find(p=>p.id==='TEST-LOCAL');
-  assert.equal(clone.name,'Braga CityWalk (Uji Lokal)');assert.equal(clone.latitude,-6.890389);assert.equal(clone.longitude,107.609583);
+  assert.equal(clone.name,'Braga CityWalk (Uji GPS)');assert.equal(clone.latitude,-6.890389);assert.equal(clone.longitude,107.609583);
   assert.equal(clone.isLocalTest,true);assert.equal(clone.sourcePoiId,'P11');assert.equal(clone.triggerRadiusMeters,15);assert.equal(clone.cooldownSeconds,60);
   assert.equal(clone.description,source.description);assert.equal(clone.history,source.history);assert.equal(clone.address,source.address);
   assert.equal(clone.rating,4.6);assert.equal(clone.reviewsCount,1800);assert.equal(clone.openingHours,'10:00 - 22:00');
@@ -103,7 +106,8 @@ test('Citywalk clone keeps original data, gallery, audio identity and geofence b
   const ids=new Map();const requireAsset=p=>{if(!ids.has(p))ids.set(p,ids.size+1);return ids.get(p);};
   const assets=vm.runInNewContext(manifest,{__DEV__:true,require:requireAsset});
   assert.equal(bundledAudioFor(clone,assets),assets.P11.source);
-  assert.equal(vm.runInNewContext(manifest,{__DEV__:false,require:requireAsset})['TEST-LOCAL'],undefined);
+  const productionAssets=vm.runInNewContext(manifest,{__DEV__:false,require:requireAsset});
+  assert.equal(bundledAudioFor(clone,productionAssets),productionAssets.P11.source);
   assert.equal(JSON.stringify(source),original);
   await assert.rejects(loadLocalTestPoi({query:async()=>({rows:[]})}),e=>e.code==='LOCAL_POI_SOURCE_MISSING');
 });
