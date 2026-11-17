@@ -37,7 +37,7 @@ const INITIAL_PLANS = [
   },
 ];
 
-export default function TripScreen({ onUseTrip }) {
+export default function TripScreen({ onUseTrip, itineraryPois = [] }) {
   const insets = useSafeAreaInsets();
   const topInset =
     insets.top > 0
@@ -67,7 +67,8 @@ export default function TripScreen({ onUseTrip }) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
       >
-        {INITIAL_PLANS.map((plan) => {
+        {[...(itineraryPois.length ? [{ id: 'added-pois', title: 'Destinasi Ditambahkan',
+          stops: itineraryPois.map(poi => ({ ...poi, time: '—', distance: '—' })) }] : []), ...INITIAL_PLANS].map((plan) => {
           const isExpanded = expandedPlanId === plan.id;
 
           return (

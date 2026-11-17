@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from './theme';
-import { WireframeImageBox } from './PoiCardComponents';
+import PoiImageGallery from './PoiImageGallery';
 
 export default function PoiTriggerModal({
   visible,
@@ -32,11 +32,8 @@ export default function PoiTriggerModal({
         <View style={styles.card}>
           <Text style={styles.heading}>Ada lokasi menarik di dekatmu!</Text>
 
-          {/* 3 Wireframe Image Boxes */}
           <View style={styles.galleryRow}>
-            <WireframeImageBox style={styles.galleryBox} height={92} />
-            <WireframeImageBox style={styles.galleryBox} height={92} />
-            <WireframeImageBox style={styles.galleryBox} height={92} />
+            <PoiImageGallery poi={poi} compact />
           </View>
 
           {/* POI Info */}

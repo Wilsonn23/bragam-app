@@ -1,25 +1,27 @@
 import { useEffect, useMemo, useReducer } from 'react';
 import { GeofenceController } from '../location/geofence';
+import { NotificationPresentation } from '../location/presentation';
 
 export function usePoiTriggers(pois, sample, active) {
-  // A new API dataset starts a new controller session.
   const controller = useMemo(() => new GeofenceController(pois), [pois]);
+  const presentation = useMemo(() => new NotificationPresentation(), []);
   const [, render] = useReducer(n => n + 1, 0);
   useEffect(() => {
     if (active && sample) controller.update(sample);
     else controller.suspend();
+    if (active) presentation.capture(controller.current());
     render();
-  }, [controller, sample, active]);
+  }, [controller, presentation, sample, active]);
   useEffect(() => {
     if (!active) return;
-    const timer = setInterval(() => { controller.prune(); render(); }, 1000);
+    const timer = setInterval(() => {
+      controller.prune();
+      presentation.capture(controller.current());
+      render();
+    }, 1000);
     return () => clearInterval(timer);
-  }, [controller, active]);
-  const event = active ? controller.current() : null;
-  const dismiss = () => {
-    // Never dismiss a different head if the rendered item expired meanwhile.
-    if (controller.current() === event) controller.dismiss();
-    render();
-  };
+  }, [controller, presentation, active]);
+  const event = active ? presentation.current() : null;
+  const dismiss = () => { presentation.dismiss(controller); render(); };
   return { event, dismiss };
 }

@@ -36,6 +36,7 @@ function MainApp() {
 
   // State daftar POI yang disimpan ke Bookmark
   const [bookmarkedPois, setBookmarkedPois] = useState([]);
+  const [itineraryPois, setItineraryPois] = useState([]);
 
   // State khusus Geofence Trigger Notification
   const [geofencePoi, setGeofencePoi] = useState(null);
@@ -93,10 +94,9 @@ function MainApp() {
   };
 
   const handleAddToItinerary = (targetPoi) => {
-    Alert.alert(
-      'Berhasil Ditambahkan',
-      `${targetPoi.name} telah ditambahkan ke Itinerary perjalananmu.`
-    );
+    if (!targetPoi?.id) return;
+    setItineraryPois(prev => prev.some(item => item.id === targetPoi.id) ? prev : [...prev, targetPoi]);
+    Alert.alert('Itinerary', `${targetPoi.name} ada di daftar Trip selama aplikasi terbuka.`);
   };
 
   const handleContainerLayout = (event) => {
@@ -228,7 +228,7 @@ function MainApp() {
           />
         );
       case 'Trip':
-        return <TripScreen onUseTrip={handleUseTrip} />;
+        return <TripScreen onUseTrip={handleUseTrip} itineraryPois={itineraryPois} />;
       case 'Account':
         return (
           <AccountScreen
@@ -296,8 +296,8 @@ function MainApp() {
         visible={Boolean(visiblePoi)}
         poi={visiblePoi}
         onClose={closePoi}
-        onSave={undefined}
-        onAddToItinerary={undefined}
+        onSave={(poi) => { if (!isPoiBookmarked(poi)) handleToggleSavePoi(poi); closePoi(); }}
+        onAddToItinerary={(poi) => { handleAddToItinerary(poi); closePoi(); }}
         onCheckNow={(poi) => {
           closePoi();
           handleOpenDetail(poi);
