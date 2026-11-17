@@ -4,12 +4,13 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   Platform,
   Modal,
   ScrollView,
   TextInput,
+  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, {
   Marker,
   Polygon,
@@ -80,6 +81,14 @@ function normalizePoiOption(item) {
 }
 
 export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
+  const insets = useSafeAreaInsets();
+  const topInset =
+    insets.top > 0
+      ? insets.top
+      : Platform.OS === 'android'
+      ? StatusBar.currentHeight || 28
+      : 44;
+
   const mapRef = useRef(null);
   const lastFetchedOriginRef = useRef(null);
 
@@ -124,7 +133,9 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
   };
 
   // State pilihan titik awal & tujuan
-  const [originSelection, setOriginSelection] = useState(/** @type {any} */ (USER_LOCATION_ID));
+  const [originSelection, setOriginSelection] = useState(
+    /** @type {any} */ (USER_LOCATION_ID)
+  );
   const [destSelection, setDestSelection] = useState(/** @returns {any} */ () =>
     resolveInitialDestination(poi)
   );
@@ -393,7 +404,7 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
   return (
     <View style={styles.root}>
       {/* Top Route Header */}
-      <SafeAreaView style={styles.topHeader}>
+      <View style={[styles.topHeader, { paddingTop: topInset }]}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={onBack} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color={COLORS.darkPurple} />
@@ -469,7 +480,7 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
             </TouchableOpacity>
           </View>
         </View>
-      </SafeAreaView>
+      </View>
 
       {/* Google Maps / Apple Maps View Area */}
       <View style={styles.mapCanvas}>
@@ -517,26 +528,47 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
           )}
 
           {/* Origin Marker */}
-          <Marker coordinate={activeOriginCoord} anchor={{ x: 0.5, y: 0.5 }}>
+          <Marker
+            coordinate={activeOriginCoord}
+            anchor={isOriginUser ? { x: 0.5, y: 0.5 } : { x: 0.5, y: 0.32 }}
+            centerOffset={isOriginUser ? { x: 0, y: 0 } : { x: 0, y: 12 }}
+          >
             {isOriginUser ? (
               <View style={styles.userPuck} />
             ) : (
-              <View style={styles.originPoiPin}>
-                <View style={styles.originPoiHole} />
+              <View style={styles.customMarkerCol}>
+                <View style={styles.teardropPin}>
+                  <View style={styles.pinInnerHole} />
+                </View>
+                <View style={styles.markerLabelBadge}>
+                  <Text style={styles.mapLabelText} numberOfLines={1}>
+                    {originText}
+                  </Text>
+                </View>
               </View>
             )}
           </Marker>
 
           {/* Destination Marker */}
-          <Marker coordinate={activeDestCoord}>
-            <View style={styles.markerGroup}>
-              <View style={styles.teardropPin}>
-                <View style={styles.pinHole} />
+          <Marker
+            coordinate={activeDestCoord}
+            anchor={isDestUser ? { x: 0.5, y: 0.5 } : { x: 0.5, y: 0.32 }}
+            centerOffset={isDestUser ? { x: 0, y: 0 } : { x: 0, y: 12 }}
+          >
+            {isDestUser ? (
+              <View style={styles.userPuck} />
+            ) : (
+              <View style={styles.customMarkerCol}>
+                <View style={styles.teardropPin}>
+                  <View style={styles.pinInnerHole} />
+                </View>
+                <View style={styles.markerLabelBadge}>
+                  <Text style={styles.mapLabelText} numberOfLines={1}>
+                    {targetText}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.markerLabelBadge}>
-                <Text style={styles.markerLabel}>{targetText}</Text>
-              </View>
-            </View>
+            )}
           </Marker>
 
           {/* Walking Duration Bubble on Route Midpoint */}
@@ -787,7 +819,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    paddingTop: Platform.OS === 'android' ? 36 : 12,
+    paddingTop: 10,
     paddingBottom: 12,
     gap: 10,
   },
@@ -845,52 +877,40 @@ const styles = StyleSheet.create({
     backgroundColor: '#EAEAEA',
     position: 'relative',
   },
-  markerGroup: {
-    flexDirection: 'row',
+  customMarkerCol: {
     alignItems: 'center',
-    gap: 6,
   },
   teardropPin: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#8B65D4',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 3,
-  },
-  pinHole: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: COLORS.lavenderTint,
-  },
-  originPoiPin: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: COLORS.darkPurple,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: COLORS.white,
+    elevation: 3,
   },
-  originPoiHole: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.white,
+  pinInnerHole: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.lavenderTint,
   },
   markerLabelBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    marginTop: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: 8,
+    maxWidth: 140,
+    elevation: 2,
   },
-  markerLabel: {
-    fontSize: 12,
+  mapLabelText: {
+    fontSize: 11,
     fontWeight: '600',
     color: COLORS.primaryPurple,
+    textAlign: 'center',
   },
   walkBubble: {
     flexDirection: 'row',
