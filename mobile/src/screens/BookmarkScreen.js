@@ -240,7 +240,7 @@ export default function BookmarkScreen({
               Apakah anda yakin ingin menghapus POI ini dari Bookmark?
             </Text>
             {poiToUnsave?.name && (
-              <Text style={styles.confirmPoiName}>"{poiToUnsave.name}"</Text>
+              <Text style={styles.confirmPoiName}>{`"${poiToUnsave.name}"`}</Text>
             )}
 
             <View style={styles.confirmButtonsRow}>

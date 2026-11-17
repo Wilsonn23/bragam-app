@@ -4,6 +4,7 @@ import Svg, { Line } from 'react-native-svg';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from './theme';
 
+/** @param {{width?: import('react-native').DimensionValue, height?: number, style?: any}} props */
 export function WireframeImageBox({ width = '100%', height = 160, style }) {
   return (
     <View style={[styles.imagePlaceholder, { width, height }, style]}>
@@ -23,10 +24,10 @@ export function PoiDetailFooter({
   rating = '5.0',
   isSaved = false,
   recommendation = false,
-  onCheckDetail,
-  onDirections,
-  onSave,
-  onAddToItinerary,
+  onCheckDetail = undefined,
+  onDirections = undefined,
+  onSave = undefined,
+  onAddToItinerary = undefined,
 }) {
   return (
     <View style={styles.footerWrapper}>
@@ -49,10 +50,10 @@ export function PoiDetailFooter({
             <Text style={[styles.ratingText, recommendation && styles.jakarta]}>{recommendation
               ? rating ? `${rating.value.toFixed(1)} (${rating.count})` : 'Belum ada ulasan'
               : rating}</Text>
-            {(recommendation ? rating ? [1, 2, 3, 4, 5] : [] : [1, 2, 3, 4]).map((star) => (
+            {(recommendation ? rating ? [1, 2, 3, 4, 5] : [] : Number(rating) > 0 ? [1, 2, 3, 4, 5] : []).map((star) => (
               <Ionicons
                 key={star}
-                name={recommendation && star > rating.value ? star - rating.value < 1 ? 'star-half' : 'star-outline' : 'star'}
+                name={recommendation && star > rating.value ? star - rating.value < 1 ? 'star-half' : 'star-outline' : !recommendation && star > Math.round(Number(rating)) ? 'star-outline' : 'star'}
                 size={14}
                 color={COLORS.darkPurple}
                 style={{ marginLeft: 2 }}

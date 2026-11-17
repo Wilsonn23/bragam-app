@@ -21,7 +21,7 @@ export async function loadDemoRecommendations(source, signal, catalogue = []) {
   if (source === 'demo-error') throw new Error('DEVELOPMENT_FAILURE');
   const examples = items.map((item) => {
     const actual = catalogue.find((poi) => poi.id === item.poi.id);
-    return { ...item, poi: { ...item.poi, imageUrl: actual?.imageUrl, images: actual?.images } };
+    return { ...item, poi: { ...item.poi, imageUrl: actual?.imageUrl, imageUrls: actual?.imageUrls, images: actual?.images } };
   });
   return { items: source === 'demo-empty' ? [] : examples, capabilities: { openAtNight: true } };
 }

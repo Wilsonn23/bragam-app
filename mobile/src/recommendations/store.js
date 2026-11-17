@@ -31,6 +31,10 @@ function createRecommendationStore(service) {
       }
     },
     cancel() { generation += 1; controller?.abort(); if (state.status === 'loading') publish({ status: 'idle' }); },
+    reset() {
+      generation += 1; controller?.abort(); scrollOffset = 0;
+      publish({ status: 'idle', items: [], capabilities: { openAtNight: false }, source: 'service', error: null });
+    },
   };
 }
 

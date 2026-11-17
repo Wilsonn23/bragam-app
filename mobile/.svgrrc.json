@@ -1,0 +1,7 @@
+{
+  "dimensions": true,
+  "svgo": true,
+  "svgoConfig": {
+    "plugins": [{ "name": "removeAttrs", "params": { "attrs": "svg:style" } }]
+  }
+}

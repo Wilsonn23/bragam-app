@@ -9,16 +9,10 @@ import {
   View,
 } from 'react-native';
 import { COLORS, RADIUS } from './theme';
+import { galleryUrls } from '../recommendations/model';
 
 function validImageUrls(poi) {
-  const images = Array.isArray(poi?.images) ? poi.images : [];
-  const urls = images
-    .map((image) => image?.imageUrl)
-    .filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
-  if (typeof poi?.imageUrl === 'string' && /^https?:\/\//i.test(poi.imageUrl)) {
-    urls.unshift(poi.imageUrl);
-  }
-  return [...new Set(urls)];
+  return galleryUrls(poi || {});
 }
 
 export function PoiFirstImage({ poi, style }) {

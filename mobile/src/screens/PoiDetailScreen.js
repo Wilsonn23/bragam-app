@@ -1,305 +1,132 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  SafeAreaView,
-  Alert,
-} from 'react-native';
-import {
-  Ionicons,
-  MaterialCommunityIcons,
-} from '@expo/vector-icons';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image, AppState } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
-import PoiImageGallery from '../components/PoiImageGallery';
-import { fetchPoiImages } from '../poi/api';
-import { reviewedRating } from '../recommendations/model';
+import { WireframeImageBox } from '../components/PoiCardComponents';
+import { getOperatingStatus, getPoiDetailFields, getPoiGalleryImages, getRatingStars } from '../poi/presentation';
+import { useAppActive, useForegroundLocation } from '../hooks/useForegroundLocation';
+import { distanceMeters } from '../location/distance';
+import { useGuideAudio } from '../audio/AudioProvider';
+import { audioSourceFor, bundledAudioFor, AUDIO_ERROR } from '../audio/guideController';
+import { POI_AUDIO_ASSETS } from '../audio/guideAssets';
 
 const DETAIL_TABS = ['Overview', 'Menu', 'Review', 'About'];
 
-export default function PoiDetailScreen({
-  poi,
-  onBack,
-  onOpenDirections,
-  isSaved = false,
-  onToggleSave,
-  onAddToItinerary,
-}) {
+export default function PoiDetailScreen({ poi, onBack, onOpenDirections, isSaved = false, onToggleSave = undefined, onAddToItinerary = undefined }) {
+  const appActive = useAppActive();
+  const { sample } = useForegroundLocation(appActive);
+  const audio = useGuideAudio();
+  const audioPoi = { ...poi, audioAsset: bundledAudioFor(poi, POI_AUDIO_ASSETS) };
+  const audioSource = audioSourceFor(audioPoi);
+  const activeAudio = audio.currentId === poi.id;
+  const playing = activeAudio && audio.status.playing;
+  const audioError = activeAudio && (audio.error || (!audio.pending && audio.status.error && AUDIO_ERROR));
+  const audioLoading = activeAudio && audio.intent && !audioError && (audio.pending || audio.status.isBuffering || (!audio.status.isLoaded && !playing));
+  const audioLabel = audioError ? 'Coba lagi' : audioLoading ? 'Memuat audio' : playing ? 'Jeda audio' : activeAudio && audio.status.isLoaded && !audio.status.didJustFinish ? 'Lanjutkan audio' : 'Nyalakan audio';
   const [activeTab, setActiveTab] = useState('Overview');
-  const [isAudioOn, setIsAudioOn] = useState(false);
-  const [loadedImages, setLoadedImages] = useState(null);
-
+  const [failedImages, setFailedImages] = useState([]);
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    let active = true;
-    const existingImages = Array.isArray(poi?.images) ? poi.images : [];
-    if (!poi?.id || existingImages.length > 0) {
-      return () => {
-        active = false;
-      };
-    }
-
-    fetchPoiImages(poi.id)
-      .then((images) => {
-        if (active) setLoadedImages({ poiId: poi.id, images });
-      })
-      .catch((error) => {
-        console.error(`[POI] Gagal memuat gambar ${poi.id}:`, error);
-        if (active) setLoadedImages({ poiId: poi.id, images: [] });
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [poi]);
-
-  const placeName = poi?.name || 'Braga Citywalk';
-  const distance = poi?.distance || '12km';
-  const rating = poi?.rating || '5.0';
-  const recommendationRating = poi?.recommendationPoiId ? reviewedRating(poi) : null;
-
-  const activePoi = {
-    ...(poi || {
-    id: placeName,
-    name: placeName,
-    distance,
-    rating,
-    }),
-    ...(loadedImages?.poiId === poi?.id ? {
-      images: loadedImages.images,
-      imageUrl: loadedImages.images[0]?.imageUrl,
-    } : {}),
-  };
-
-  const handlePressSave = () => {
-    onToggleSave?.(activePoi);
-  };
-
-  const handlePressAddItinerary = () => {
-    if (onAddToItinerary) {
-      onAddToItinerary(activePoi);
-    } else {
-      Alert.alert(
-        'Ditambahkan ke Itinerary',
-        `${placeName} berhasil ditambahkan ke rencana perjalananmu.`
-      );
-    }
-  };
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') setNow(Date.now());
+    });
+    return () => { clearInterval(timer); subscription.remove(); };
+  }, []);
+  const fields = getPoiDetailFields({ ...poi, distanceMeters: distanceMeters(sample, poi) });
+  const operatingStatus = getOperatingStatus(poi.openingHours, new Date(now));
+  const images = getPoiGalleryImages(poi).filter(uri => !failedImages.includes(uri));
 
   return (
     <SafeAreaView style={styles.root}>
-      {/* Top Back Button */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Kembali" onPress={onBack} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={COLORS.darkPurple} />
         </TouchableOpacity>
       </View>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Header Info + Nyalakan Audio */}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.headerInfoRow}>
           <View style={styles.distanceCol}>
-            <View style={styles.pinBadge}>
-              <Ionicons name="location" size={18} color={COLORS.darkPurple} />
-            </View>
-            <Text style={styles.distanceText}>{distance}</Text>
+            <View style={styles.pinBadge}><Ionicons name="location" size={18} color={COLORS.darkPurple} /></View>
+            <Text style={styles.distanceText}>{fields.distance}</Text>
           </View>
-
           <View style={styles.titleCol}>
-            <Text style={styles.poiTitle}>{placeName}</Text>
+            <Text accessibilityRole="header" style={styles.poiTitle}>{poi.name}</Text>
+            <Text style={styles.categoryText}>{poi.category}</Text>
             <View style={styles.ratingRow}>
-              <Text style={styles.ratingText}>{rating}</Text>
-              {(poi?.recommendationPoiId ? recommendationRating ? [1, 2, 3, 4, 5] : [] : [1, 2, 3, 4]).map((star) => (
-                <Ionicons
-                  key={star}
-                  name={poi?.recommendationPoiId && star > recommendationRating.value
-                    ? star - recommendationRating.value < 1 ? 'star-half' : 'star-outline' : 'star'}
-                  size={14}
-                  color={COLORS.darkPurple}
-                  style={{ marginLeft: 2 }}
-                />
+              <Text style={styles.ratingText}>{fields.rating}</Text>
+              {getRatingStars(poi.rating).map((name, index) => (
+                <Ionicons key={index} name={name} size={14} color={COLORS.darkPurple} />
               ))}
             </View>
           </View>
-
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => setIsAudioOn(!isAudioOn)}
-            style={styles.audioBtn}
-          >
-            <Text style={styles.audioBtnText}>
-              {isAudioOn ? 'Matikan Audio' : 'Nyalakan Audio'}
-            </Text>
-            <Ionicons
-              name={isAudioOn ? 'volume-mute' : 'volume-high'}
-              size={18}
-              color={COLORS.white}
-              style={{ marginLeft: 6 }}
-            />
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={audioLoading ? 'Batalkan pemuatan audio' : audioLabel}
+            accessibilityState={{ disabled: audioSource === null, busy: !!audioLoading }}
+            disabled={audioSource === null} onPress={() => audio.toggle(audioPoi)} style={[styles.audioBtn, audioSource === null && styles.disabled]}>
+            <Text style={styles.audioBtnText}>{audioLabel}</Text>
+            <Ionicons name={playing ? 'pause' : 'volume-high'} size={15} color={COLORS.white} style={{ marginLeft: 4 }} />
           </TouchableOpacity>
         </View>
-
-        {/* Action Pills: Directions, Save / Saved, Add to Itinerary */}
+        {!!audioError && <Text accessibilityLiveRegion="polite" style={styles.audioError}>{audioError}</Text>}
         <View style={styles.actionRow}>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => onOpenDirections?.(activePoi)}
-            style={styles.outlinePillBtn}
-          >
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: !onOpenDirections }} disabled={!onOpenDirections}
+            onPress={() => onOpenDirections?.(poi)} style={[styles.outlinePillBtn, !onOpenDirections && styles.disabled]}>
             <Text style={styles.outlinePillText}>Directions</Text>
-            <MaterialCommunityIcons
-              name="directions"
-              size={17}
-              color={COLORS.darkPurple}
-              style={{ marginLeft: 5 }}
-            />
+            <MaterialCommunityIcons name="directions" size={17} color={COLORS.darkPurple} style={{ marginLeft: 5 }} />
           </TouchableOpacity>
-
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={handlePressSave}
-            style={[
-              styles.outlinePillBtn,
-              isSaved && styles.savedPillBtnActive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.outlinePillText,
-                isSaved && styles.savedPillTextActive,
-              ]}
-            >
-              {isSaved ? 'Saved' : 'Save'}
-            </Text>
-            <Ionicons
-              name={isSaved ? 'bookmark' : 'bookmark-outline'}
-              size={15}
-              color={isSaved ? COLORS.white : COLORS.darkPurple}
-              style={{ marginLeft: 5 }}
-            />
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: !onToggleSave }} disabled={!onToggleSave}
+            onPress={() => onToggleSave?.(poi)} style={[styles.outlinePillBtn, isSaved && styles.savedPillBtnActive, !onToggleSave && styles.disabled]}>
+            <Text style={[styles.outlinePillText, isSaved && styles.savedPillTextActive]}>{isSaved ? 'Saved' : 'Save'}</Text><Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={15} color={isSaved ? COLORS.white : COLORS.darkPurple} style={{ marginLeft: 5 }} />
           </TouchableOpacity>
-
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={handlePressAddItinerary}
-            style={styles.outlinePillBtn}
-          >
-            <Text style={styles.outlinePillText}>Add to Itinerary</Text>
-            <Ionicons
-              name="add-circle-outline"
-              size={17}
-              color={COLORS.darkPurple}
-              style={{ marginLeft: 4 }}
-            />
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: !onAddToItinerary }} disabled={!onAddToItinerary}
+            onPress={() => onAddToItinerary?.(poi)} style={[styles.outlinePillBtn, !onAddToItinerary && styles.disabled]}>
+            <Text style={styles.outlinePillText}>Add to Itinerary</Text><Ionicons name="add-circle-outline" size={17} color={COLORS.darkPurple} style={{ marginLeft: 4 }} />
           </TouchableOpacity>
         </View>
-
-        <View style={styles.galleryGrid}>
-          <PoiImageGallery poi={activePoi} />
-        </View>
-
-        {/* Tabs Bar */}
-        <View style={styles.tabsRow}>
-          {DETAIL_TABS.map((tab) => {
-            const isSelected = activeTab === tab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                activeOpacity={0.85}
-                onPress={() => setActiveTab(tab)}
-                style={[styles.tabPill, isSelected && styles.tabPillActive]}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    isSelected && styles.tabTextActive,
-                  ]}
-                >
-                  {tab}
-                </Text>
+        <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryGrid}>
+          {images.length ? images.map((uri, index) => <Image key={uri} source={{ uri }}
+            accessibilityLabel={`Foto ${poi.name} ${index + 1} dari ${images.length}`}
+            onError={() => setFailedImages(previous => [...previous, uri])} style={styles.galleryImage} />) :
+            <WireframeImageBox width={220} height={232} />}
+        </ScrollView>
+        {!images.length && <Text style={styles.galleryCaption}>Foto belum tersedia</Text>}
+        <View style={styles.tabsUnderline}>
+          <View style={styles.tabsRow}>
+            {DETAIL_TABS.map(tab => (
+              <TouchableOpacity key={tab} accessibilityRole="tab" accessibilityState={{ selected: activeTab === tab }}
+                onPress={() => setActiveTab(tab)} style={[styles.tabPill, activeTab === tab && styles.tabPillActive]}>
+                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
               </TouchableOpacity>
-            );
-          })}
+            ))}
+          </View>
         </View>
-
-        {/* Tab Content */}
-        {activeTab === 'Overview' ? (
-          <View style={styles.overviewList}>
-            {/* Row 1: Address */}
-            <View style={styles.detailRow}>
-              <Ionicons
-                name="location"
-                size={22}
-                color={COLORS.darkPurple}
-                style={styles.detailIcon}
-              />
-              <Text style={styles.detailText}>
-                {poi?.address ||
-                  'Jl. Braga No.99–101, Braga, Kec. Sumur\nBandung, Kota Bandung, Jawa Barat 40111'}
-              </Text>
-            </View>
-
-            {/* Row 2: Operating Hours */}
-            <View style={styles.detailRow}>
-              <Ionicons
-                name="time-outline"
-                size={22}
-                color={COLORS.darkPurple}
-                style={styles.detailIcon}
-              />
-              <View style={styles.hoursGroup}>
-                <Text style={styles.detailText}>
-                  {poi?.status || 'Closed'}
-                </Text>
-                <View style={styles.verticalDivider} />
-                <Text style={styles.detailText}>
-                  {poi?.openingHours || 'Opens 10.00 am'}
-                </Text>
-              </View>
-            </View>
-
-            {/* Row 3: Website */}
-            <View style={styles.detailRow}>
-              <Ionicons
-                name="globe"
-                size={22}
-                color={COLORS.darkPurple}
-                style={styles.detailIcon}
-              />
-              <Text style={styles.detailText}>
-                {poi?.website || 'http://www.bragacitywalk.co.id/'}
-              </Text>
-            </View>
-          </View>
-        ) : activeTab === 'About' ? (
-          <View style={styles.aboutList}>
-            <View style={styles.aboutSection}>
-              <Text style={styles.aboutHeading}>Description</Text>
-              <Text style={styles.aboutText}>
-                {poi?.description || poi?.shortDescription || 'Deskripsi belum tersedia.'}
-              </Text>
-            </View>
-            <View style={styles.aboutSection}>
-              <Text style={styles.aboutHeading}>History</Text>
-              <Text style={styles.aboutText}>
-                {poi?.history || 'History belum tersedia.'}
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.placeholderTabBox}>
-            <Text style={styles.placeholderTabText}>
-              Konten {activeTab} untuk {placeName} akan tampil di sini.
-            </Text>
-          </View>
-        )}
+        <View style={styles.overviewList}>
+          {activeTab === 'Overview' && <>
+            <DetailRow icon="information-circle-outline" value={fields.description} />
+            <DetailRow icon="location-outline" value={fields.address} />
+            <DetailRow icon="time-outline" value={operatingStatus ? `${operatingStatus}  |  ${fields.openingHours}` : fields.openingHours} />
+            <DetailRow icon="globe-outline" value={fields.website} />
+          </>}
+          {activeTab === 'Menu' && <>
+            <DetailRow icon="restaurant-outline" value={fields.menu} />
+            <DetailRow icon="pricetag-outline" value={fields.prices} />
+          </>}
+          {activeTab === 'Review' && <>
+            <DetailRow icon="star-outline" value={fields.ratingSummary} />
+            <DetailRow icon="chatbubble-outline" value={fields.reviews} />
+          </>}
+          {activeTab === 'About' && <DetailRow icon="book-outline" value={fields.history} />}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
+}
+function DetailRow({ icon, value }) {
+  return <View style={styles.detailRow}>
+    <Ionicons name={icon} size={22} color={COLORS.darkPurple} style={styles.detailIcon} />
+    <Text style={styles.detailText}>{value}</Text>
+  </View>;
 }
 
 const styles = StyleSheet.create({
@@ -327,7 +154,8 @@ const styles = StyleSheet.create({
   },
   distanceCol: {
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 8,
+    maxWidth: 62,
   },
   pinBadge: {
     width: 32,
@@ -344,6 +172,7 @@ const styles = StyleSheet.create({
   },
   titleCol: {
     flex: 1,
+    minWidth: 0,
   },
   poiTitle: {
     fontSize: 16,
@@ -351,6 +180,11 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: 4,
   },
+  categoryText: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 4 },
+  audioError: { fontSize: 12, color: COLORS.textSecondary, marginHorizontal: 20, marginTop: 6 },
+  galleryImage: { width: 220, height: 232, borderRadius: RADIUS.md, backgroundColor: COLORS.lavenderTint },
+  galleryCaption: { color: COLORS.textSecondary, fontSize: 12, marginHorizontal: 20, marginTop: 6 },
+  disabled: { opacity: 0.45 },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -375,12 +209,14 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     marginTop: 14,
     gap: 6,
   },
   outlinePillBtn: {
+    flexGrow: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -391,20 +227,15 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
-  savedPillBtnActive: {
-    backgroundColor: COLORS.darkPurple,
-    borderColor: COLORS.darkPurple,
-  },
   outlinePillText: {
     fontSize: 11,
     fontWeight: '600',
     color: COLORS.textPrimary,
   },
-  savedPillTextActive: {
-    color: COLORS.white,
-  },
+  savedPillBtnActive: { backgroundColor: COLORS.darkPurple, borderColor: COLORS.darkPurple },
+  savedPillTextActive: { color: COLORS.white },
   galleryGrid: {
-    flexDirection: 'column',
+    flexDirection: 'row',
     paddingHorizontal: 20,
     marginTop: 14,
     gap: 10,
@@ -416,18 +247,20 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 10,
   },
-  tabsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
+  tabsUnderline: {
     marginTop: 16,
     borderBottomWidth: 3,
     borderBottomColor: COLORS.lavenderTint,
   },
+  tabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+  },
   tabPill: {
+    flex: 1,
     paddingVertical: 7,
-    paddingHorizontal: 16,
+    paddingHorizontal: 2,
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
   },
@@ -438,6 +271,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: COLORS.textPrimary,
+    textAlign: 'center',
   },
   tabTextActive: {
     color: COLORS.white,
@@ -445,25 +279,6 @@ const styles = StyleSheet.create({
   },
   overviewList: {
     backgroundColor: COLORS.white,
-  },
-  aboutList: {
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 20,
-    paddingVertical: 6,
-  },
-  aboutSection: {
-    paddingVertical: 12,
-  },
-  aboutHeading: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    marginBottom: 6,
-  },
-  aboutText: {
-    fontSize: 13,
-    color: COLORS.textPrimary,
-    lineHeight: 20,
   },
   detailRow: {
     flexDirection: 'row',
@@ -480,6 +295,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textPrimary,
     lineHeight: 19,
+    flexShrink: 1,
   },
   hoursGroup: {
     flexDirection: 'row',

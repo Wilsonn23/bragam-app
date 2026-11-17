@@ -35,9 +35,19 @@ export const theme = {
   secondary: COLORS.mediumPurple,
   surface: COLORS.white,
   background: COLORS.softLilacBg,
+  ink: COLORS.textPrimary,
+  muted: COLORS.textSecondary,
+  error: "#a52222",
+  overlay: "rgba(0,0,0,0.55)",
   text: COLORS.textPrimary,
   textSecondary: COLORS.textSecondary,
   border: COLORS.borderSubtle,
+};
+
+// Restore UI04's named palette required by the notification card carried from PB05–PB06.
+export const POI_NOTIFICATION = {
+  surface: '#F9F7FF', border: '#602ECC', ink: '#3A1678',
+  backdrop: 'rgba(34, 24, 51, 0.5)', tint: '#E7DAFF', radius: 32, borderWidth: 4,
 };
 
 export default theme;

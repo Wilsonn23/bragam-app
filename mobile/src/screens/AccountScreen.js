@@ -10,7 +10,7 @@ import Svg, { Line } from 'react-native-svg';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 
-export default function AccountScreen() {
+export default function AccountScreen({ user = null, onLogout = undefined } = {}) {
   return (
     <View style={styles.root}>
       {/* Upper Purple Profile Section */}
@@ -44,7 +44,7 @@ export default function AccountScreen() {
           </Svg>
         </View>
 
-        <Text style={styles.userName}>Favian</Text>
+        <Text style={styles.userName}>{user?.name || 'Pengunjung'}</Text>
         <Text style={styles.visitCounterText}>
           6 Destinasi Braga Telah Kamu Kunjungi!
         </Text>
@@ -86,7 +86,9 @@ export default function AccountScreen() {
 
         {/* Spacer + Keluar Akun Button */}
         <View style={styles.logoutWrapper}>
-          <TouchableOpacity activeOpacity={0.85} style={styles.logoutBtn}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Keluar Akun"
+            accessibilityState={{ disabled: !onLogout }} disabled={!onLogout}
+            onPress={onLogout} activeOpacity={0.85} style={styles.logoutBtn}>
             <Text style={styles.logoutText}>Keluar Akun</Text>
             <MaterialCommunityIcons
               name="exit-to-app"

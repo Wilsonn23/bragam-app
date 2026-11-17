@@ -58,12 +58,12 @@ function haversineMeters(a, b) {
 }
 
 function normalizePoiOption(item) {
-  const localMeta = BRAGA_POIS.find((b) => b.id === item.id) || {};
+  const localMeta = BRAGA_POIS.find((b) => b.id === item.id);
   const lat = Number(
-    item.coordinate?.latitude ?? item.latitude ?? item.lat ?? localMeta.latitude
+    item.coordinate?.latitude ?? item.latitude ?? item.lat ?? localMeta?.latitude
   );
   const lng = Number(
-    item.coordinate?.longitude ?? item.longitude ?? item.lng ?? localMeta.longitude
+    item.coordinate?.longitude ?? item.longitude ?? item.lng ?? localMeta?.longitude
   );
 
   return {
@@ -71,7 +71,7 @@ function normalizePoiOption(item) {
     ...item,
     id: String(item.id || item.name),
     name: item.name || 'Titik Braga',
-    category: item.category || localMeta.category || 'POI Braga',
+    category: item.category || localMeta?.category || 'POI Braga',
     coordinate: {
       latitude: Number.isFinite(lat) ? lat : BRAGA_REGION.latitude,
       longitude: Number.isFinite(lng) ? lng : BRAGA_REGION.longitude,
@@ -124,8 +124,8 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
   };
 
   // State pilihan titik awal & tujuan
-  const [originSelection, setOriginSelection] = useState(USER_LOCATION_ID);
-  const [destSelection, setDestSelection] = useState(() =>
+  const [originSelection, setOriginSelection] = useState(/** @type {any} */ (USER_LOCATION_ID));
+  const [destSelection, setDestSelection] = useState(/** @returns {any} */ () =>
     resolveInitialDestination(poi)
   );
 
@@ -139,14 +139,6 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
   const [routeSteps, setRouteSteps] = useState([]);
   const [baseDistanceMeters, setBaseDistanceMeters] = useState(0);
   const [baseDurationSeconds, setBaseDurationSeconds] = useState(60);
-
-  // Sinkronkan tujuan otomatis saat tombol "Directions" pada POI ditekan
-  useEffect(() => {
-    if (poi) {
-      setOriginSelection(USER_LOCATION_ID);
-      setDestSelection(resolveInitialDestination(poi));
-    }
-  }, [poi]);
 
   const isOriginUser = originSelection === USER_LOCATION_ID;
   const isDestUser = destSelection === USER_LOCATION_ID;
@@ -169,7 +161,7 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
 
   const activeDestCoord = isDestUser
     ? userGpsCoord
-    : destSelection?.coordinate || availablePois[0].coordinate;
+    : destSelection?.coordinate || availablePois[0]?.coordinate || DEFAULT_USER_ORIGIN;
 
   // Fetch rute jalan kaki berbasis jalan raya/trotoar setiap kali origin/destination berubah signifikan (>12m)
   useEffect(() => {

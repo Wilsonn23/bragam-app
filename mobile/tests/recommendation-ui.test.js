@@ -22,7 +22,7 @@ const rn = {
   View: host('View'), Text: host('Text'), Image: host('Image'), TextInput: host('TextInput'),
   Pressable: host('Pressable'), TouchableOpacity: host('TouchableOpacity'), ScrollView: host('ScrollView'),
   Modal: host('Modal'), ActivityIndicator: host('ActivityIndicator'), SafeAreaView: host('SafeAreaView'),
-  StatusBar: host('StatusBar'), Platform: { OS: 'android' },
+  StatusBar: host('StatusBar'), Platform: { OS: 'android' }, AppState:{currentState:'active',addEventListener:()=>({remove(){}})},
   StyleSheet: { create: x => x, absoluteFill: {}, absoluteFillObject: {} },
   Dimensions: { get: () => ({ height: 820, width: 390 }) }, useWindowDimensions: () => ({ height: 820, width: 390 }),
   PanResponder: { create: () => ({ panHandlers: {} }) },
@@ -35,22 +35,36 @@ rn.FlatList = React.forwardRef((props, ref) => {
     props.data.length ? props.data.map((item, index) => React.createElement(React.Fragment, { key: props.keyExtractor(item) },
       props.renderItem({ item, index }))) : props.ListEmptyComponent);
 });
+const audioToggles = [];
+let activeWatchers=0;
+let gpsTimestamp=Date.now();
+const locationMock={ Accuracy:{High:6}, requestForegroundPermissionsAsync:async()=>({status:'granted'}),
+ watchPositionAsync:async(options, accept)=>{activeWatchers++;accept({timestamp:++gpsTimestamp,coords:{latitude:-6.91685,longitude:107.60895,accuracy:10}});return {remove(){activeWatchers--;}};},
+ getCurrentPositionAsync:async()=>({timestamp:++gpsTimestamp,coords:{latitude:-6.91685,longitude:107.60895,accuracy:10}})};
+const providerData = {pois:[], loading:false, error:null};
 const load = Module._load;
 Module._load = function(request, parent, isMain) {
   if (request === 'react-native') return rn;
+  if (request === 'react-native-safe-area-context') return {SafeAreaView:rn.SafeAreaView};
+  if (/poi\/PoiProvider$/.test(request)) return {usePois:()=>providerData};
+  if (/hooks\/usePoiTriggers$/.test(request)) return {usePoiTriggers:()=>({event:null,dismiss(){}})};
+  if (/audio\/AudioProvider$/.test(request)) return {useGuideAudio:()=>({currentId:null, status:{}, toggle:poi=>audioToggles.push(poi.id)})};
+  if (request === '@expo-google-fonts/plus-jakarta-sans') return {useFonts:()=>[true,null]};
+  if (/screens\/LoginScreen$/.test(request)) return {__esModule:true, default:props=>React.createElement(rn.Pressable,{accessibilityLabel:'Masuk untuk uji',onPress:()=>props.onLogin({id:'test-user'})},React.createElement(rn.Text,null,'Masuk untuk uji'))};
   if (request === '@expo/vector-icons') return { Ionicons: host('Icon'), MaterialIcons: host('Icon'), MaterialCommunityIcons: host('Icon') };
   if (request === 'react-native-svg') return { __esModule: true, default: host('Svg'), Line: host('Line') };
   if (request === 'react-native-maps') return { __esModule: true, default: host('MapView'), Marker: host('Marker'), Polygon: host('Polygon'), Polyline: host('Polyline'), PROVIDER_GOOGLE: 'google' };
   if (request === 'expo-font') return { useFonts: () => [true, null] };
   if (request === 'expo-constants') return { expoConfig: { hostUri: 'backend.test:8081' } };
-  if (request === 'expo-location') return { requestForegroundPermissionsAsync: async () => ({ status: 'denied' }) };
-  if (/hooks\/useForegroundLocation$/.test(request)) return { useAppActive: () => true, useForegroundLocation: () => ({ sample: null }) };
+  if (request === 'expo-location') return locationMock;
   if (/components\/SearchPoiOverlay$/.test(request)) return { __esModule: true, default: () => null };
-  if (/screens\/(HomeScreen|TripScreen|AccountScreen|NavigationScreen|TripRouteSummaryScreen|BookmarkScreen)$/.test(request)) {
+  if (/screens\/(HomeScreen|TripScreen|NavigationScreen|TripRouteSummaryScreen|BookmarkScreen)$/.test(request)) {
     return { __esModule: true, default: () => React.createElement('SiblingScreen') };
   }
   return load.apply(this, arguments);
 };
+Module._extensions['.mp3'] = module => { module.exports = 1; };
+Module._extensions['.svg'] = module => { module.exports = host('SvgAsset'); };
 Module._extensions['.ttf'] = (module, filename) => { module.exports = filename; };
 const originalJs = Module._extensions['.js'];
 Module._extensions['.js'] = function(module, filename) {
@@ -148,15 +162,22 @@ test('actual App switches Nearby/Recommendation, opens correct detail, restores 
   };
   let view;
   await act(async () => { view = renderer.create(React.createElement(App)); });
+  await press(view, 'Masuk untuk uji');
   await press(view, 'Explore');
+  assert.equal(activeWatchers, 1, 'Explore shares the host GPS watcher');
   assert.equal(cardIds(view).length, 0);
   await press(view, 'Recommendation');
   assert.deepEqual(cardIds(view), ['recommendation-P03', 'recommendation-P01']);
+  assert.equal(activeWatchers,1,'Recommendation does not add another location watcher');
   await act(async () => view.root.findByType('TextInput').props.onChangeText('Cantina'));
   await press(view, 'Save Sweet Cantina');
   assert.ok(view.root.findAllByType('TouchableOpacity').some(n => n.props.accessibilityLabel === 'Saved Sweet Cantina'));
   await press(view, 'Check Detail Sweet Cantina');
   assert.match(allText(view), /Sweet Cantina/);
+  assert.equal(activeWatchers,1,'Opening detail suspends the host watcher before detail tracks');
+  assert.match(allText(view), /Nyalakan audio/);
+  await press(view, 'Nyalakan audio');
+  assert.equal(audioToggles.at(-1),'P03');
   const back = view.root.findAllByType('TouchableOpacity').find(n => n.findAllByType('Icon').some(i => i.props.name === 'arrow-back'));
   assert.ok(back);
   await act(async () => back.props.onPress());
@@ -169,6 +190,15 @@ test('actual App switches Nearby/Recommendation, opens correct detail, restores 
   await press(view, 'Nearby You'); assert.equal(cardIds(view).length, 0);
   await press(view, 'Recommendation'); assert.deepEqual(cardIds(view), ['recommendation-P03']);
   assert.equal(recommendationRequests, 1);
+  await press(view, 'Account');
+  assert.equal(activeWatchers,0,'Leaving Explore stops location tracking');
+  await press(view, 'Keluar Akun');
+  await press(view, 'Masuk untuk uji');
+  await press(view, 'Explore');
+  assert.equal(cardIds(view).length, 0);
+  await press(view, 'Recommendation');
+  assert.equal(view.root.findByType('TextInput').props.value, '');
+  assert.equal(recommendationRequests, 2);
   await act(async () => view.unmount());
 });
 

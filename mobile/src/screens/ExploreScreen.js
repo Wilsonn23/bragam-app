@@ -19,13 +19,11 @@ import MapView, {
   Polyline,
   PROVIDER_GOOGLE,
 } from 'react-native-maps';
-import * as Location from 'expo-location';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
-import { PoiDetailFooter } from '../components/PoiCardComponents';
+import { WireframeImageBox, PoiDetailFooter } from '../components/PoiCardComponents';
 import PoiImageGallery from '../components/PoiImageGallery';
 import SearchPoiOverlay from '../components/SearchPoiOverlay';
-import { API_BASE_URL } from '../config/api';
 import RecommendationPanel, { RecommendationSearch } from '../components/RecommendationPanel';
 import { locationForRecommendations } from '../recommendations/model';
 import {
@@ -34,7 +32,9 @@ import {
   BRAGA_ZONE_POLYGON,
   BRAGA_GRAY_MAP_STYLE,
 } from '../constants/bragaMapData';
-import { useAppActive, useForegroundLocation } from '../hooks/useForegroundLocation';
+
+// Sesuaikan IP komputer & PORT dengan yang ada di backend/.env
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 275;
@@ -84,12 +84,12 @@ function isPointInPolygon(point, polygon) {
 }
 
 function normalizePoiItem(item) {
-  const localMeta = BRAGA_POIS.find((b) => b.id === item.id) || {};
+  const localMeta = BRAGA_POIS.find((b) => b.id === item.id);
   const lat = Number(
-    item.coordinate?.latitude ?? item.latitude ?? item.lat ?? localMeta.latitude
+    item.coordinate?.latitude ?? item.latitude ?? item.lat ?? localMeta?.latitude
   );
   const lng = Number(
-    item.coordinate?.longitude ?? item.longitude ?? item.lng ?? localMeta.longitude
+    item.coordinate?.longitude ?? item.longitude ?? item.lng ?? localMeta?.longitude
   );
 
   return {
@@ -101,17 +101,18 @@ function normalizePoiItem(item) {
       latitude: Number.isFinite(lat) ? lat : BRAGA_REGION.latitude,
       longitude: Number.isFinite(lng) ? lng : BRAGA_REGION.longitude,
     },
-    rating: String(item.rating ?? localMeta.rating ?? '4.6'),
-    distance: item.distance || localMeta.distance || `${item.triggerRadiusMeters || 10}m`,
+    rating: item.rating == null ? 'Belum tersedia' : String(item.rating),
+    distance: Number.isFinite(item.distanceMeters) ? `${Math.round(item.distanceMeters)} m` : 'Jarak belum tersedia',
   };
 }
 
 export default function ExploreScreen({
+  gps,
   recommendationStore,
   exploreView,
   onExploreViewChange,
   windowShrink = 0,
-  pois = BRAGA_POIS,
+  pois = [],
   bookmarkedPois = [],
   onOpenDetail,
   onOpenDirections,
@@ -133,48 +134,9 @@ export default function ExploreScreen({
   // State koordinat GPS dari MapView / expo-location sebagai cadangan cepat
   const [mapUserCoord, setMapUserCoord] = useState(null);
 
-  // Baca GPS perangkat melalui hook foreground
-  const isAppActive = useAppActive();
-  const locationState = useForegroundLocation(isAppActive);
-  const hookCoords =
-    locationState?.sample ||
-    locationState?.location?.coords ||
-    locationState?.coords ||
-    locationState?.location ||
-    locationState;
-
-  // Ambil posisi terakhir / posisi cepat saat layar dibuka agar tidak menunggu lama
-  useEffect(() => {
-    let isMounted = true;
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted' || !isMounted) return;
-
-        const lastKnown = await Location.getLastKnownPositionAsync();
-        if (lastKnown?.coords && isMounted) {
-          setMapUserCoord({
-            latitude: lastKnown.coords.latitude,
-            longitude: lastKnown.coords.longitude,
-          });
-        }
-
-        const current = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        if (current?.coords && isMounted) {
-          setMapUserCoord({
-            latitude: current.coords.latitude,
-            longitude: current.coords.longitude,
-          });
-        }
-      } catch (_) {}
-    })();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  // App owns foreground tracking shared with PB05–PB06. Do not create a second watcher here.
+  const locationState = gps;
+  const hookCoords = gps.sample;
 
   // Gabungkan sumber koordinat terbaik (hook -> MapView -> expo-location)
   const resolvedUserCoord = useMemo(() => {
@@ -207,7 +169,7 @@ export default function ExploreScreen({
   const [selectedEnv, setSelectedEnv] = useState('Semua');
   const [selectedRating, setSelectedRating] = useState('0');
   const [openDropdown, setOpenDropdown] = useState(null);
-  const [sheetPois, setSheetPois] = useState(BRAGA_POIS);
+  const [sheetPois, setSheetPois] = useState([]);
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/categories`)
@@ -379,7 +341,7 @@ export default function ExploreScreen({
     selectedEnv !== 'Semua' ||
     selectedRating !== '0';
 
-  const fallbackPois = (Array.isArray(pois) && pois.length > 0 ? pois : BRAGA_POIS).map(
+  const fallbackPois = (Array.isArray(pois) ? pois : []).map(
     normalizePoiItem
   );
 
@@ -961,7 +923,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   dropdownBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(49, 20, 101, 0.45)',
     justifyContent: 'center',
     paddingHorizontal: 24,

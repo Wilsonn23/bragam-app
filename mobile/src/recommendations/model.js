@@ -1,4 +1,5 @@
 const { distanceMeters, validCoordinate } = require('../location/distance');
+const { getPoiGalleryImages } = require('../poi/presentation');
 
 const DEFAULT_FILTERS = Object.freeze({ query: '', category: '', openAtNight: false, minRating: 0 });
 
@@ -19,9 +20,9 @@ function adaptRecommendations(payload) {
 }
 
 function reviewedRating(poi) {
-  const count = Number(poi.reviews_count);
+  const count = Number(poi.reviewsCount ?? poi.reviews_count);
   const value = Number(poi.rating);
-  return Number.isFinite(count) && count > 0 && Number.isFinite(value) && value > 0 && value <= 5
+  return Number.isInteger(count) && count > 0 && Number.isFinite(value) && value > 0 && value <= 5
     ? { value, count } : null;
 }
 
@@ -59,10 +60,28 @@ function filterRecommendations(items, filters = DEFAULT_FILTERS) {
 function poiForDetail(item, location) {
   if (!item?.poi?.id) throw new Error('INVALID_POI_ID');
   const rating = reviewedRating(item.poi);
+  const target = coordinates(item.poi);
   return { ...item.poi, distance: distanceLabel(item.poi, location),
-    rating: rating ? rating.value.toFixed(1) : 'Belum ada ulasan',
+    distanceMeters: target && validCoordinate(location) ? distanceMeters(location, target) : undefined,
+    rating: rating ? rating.value : null,
+    reviewsCount: rating ? rating.count : 0,
+    imageUrls: galleryUrls(item.poi),
     recommendationPoiId: item.poi.id };
 }
 
+/** Current main uses imageUrls; retain the older image metadata at this boundary. */
+function galleryUrls(poi) {
+  return getPoiGalleryImages({ ...poi, imageUrls: [...(Array.isArray(poi.imageUrls) ? poi.imageUrls : []),
+    ...(Array.isArray(poi.images) ? poi.images.map(image => image?.imageUrl) : [])] });
+}
+
+/** A recommendation ID must never resolve to a different POI merely because its name matches. */
+function resolveRecommendationDetail(poi, catalogue) {
+  if (!poi || typeof poi.id !== 'string' || !poi.id.trim()) return null;
+  const canonical = catalogue.find(record => record.id === poi.id);
+  const provided = Object.fromEntries(Object.entries(poi).filter(([, value]) => value !== undefined));
+  return { ...canonical, ...provided, id: poi.id };
+}
+
 module.exports = { DEFAULT_FILTERS, adaptRecommendations, reviewedRating, coordinates,
-  locationForRecommendations, distanceLabel, filterRecommendations, poiForDetail };
+  locationForRecommendations, distanceLabel, filterRecommendations, poiForDetail, galleryUrls, resolveRecommendationDetail };

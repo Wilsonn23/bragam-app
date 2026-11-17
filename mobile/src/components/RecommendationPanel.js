@@ -5,7 +5,7 @@ import { COLORS, RADIUS } from './theme';
 import { PoiDetailFooter } from './PoiCardComponents';
 import PoiImageGallery from './PoiImageGallery';
 import PoiFilterPicker from './PoiFilterPicker';
-import { DEFAULT_FILTERS, coordinates, distanceLabel, filterRecommendations, poiForDetail, reviewedRating } from '../recommendations/model';
+import { DEFAULT_FILTERS, coordinates, distanceLabel, filterRecommendations, poiForDetail, reviewedRating, resolveRecommendationDetail } from '../recommendations/model';
 const demo = __DEV__ ? require('../dev/recommendations') : null;
 function Pill({
   label,
@@ -87,11 +87,12 @@ export default function RecommendationPanel({
       ...update
     });
   };
-  const categories = [...new Set(state.items.map(({
+  const items = state.items.map(item => ({ ...item, poi: resolveRecommendationDetail(item.poi, catalogue) }));
+  const categories = [...new Set(items.map(({
     poi
   }) => poi.category).filter(Boolean))];
   const nightFilter = filters.openAtNight && state.capabilities.openAtNight;
-  const filtered = filterRecommendations(state.items, { ...filters, openAtNight: nightFilter });
+  const filtered = filterRecommendations(items, { ...filters, openAtNight: nightFilter });
   const isFiltered = !!(filters.query.trim() || filters.category || nightFilter || filters.minRating);
   const ready = state.status === 'success';
   const header = <>

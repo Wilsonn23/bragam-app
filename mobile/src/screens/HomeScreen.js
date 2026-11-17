@@ -18,17 +18,12 @@ const TRIP_STOPS = [
 ];
 
 export default function HomeScreen({
-  pois = [],
+  pois,
   onOpenDetail,
   onOpenDirections,
   onUseTrip,
 }) {
-  const recommendedPoi = pois.find((poi) => poi.id === 'P01') || pois[0] || {
-    name: 'Braga Citywalk',
-    distance: '12km',
-    rating: '5.0',
-  };
-
+  const recommended = pois?.[0];
   return (
     <View style={styles.root}>
       {/* Top Purple Header */}
@@ -176,19 +171,17 @@ export default function HomeScreen({
             Coba Kunjungi Rekomendasi Destinasi Braga!
           </Text>
 
-          <PoiFirstImage poi={recommendedPoi} style={styles.recommendationImage} />
+          {recommended ? <PoiFirstImage poi={recommended} style={styles.recommendationImage} /> : null}
 
-          <PoiDetailFooter
-            name={recommendedPoi.name}
-            distance={recommendedPoi.distance || `${recommendedPoi.triggerRadiusMeters || 10}m`}
-            rating={recommendedPoi.rating || '5.0'}
+          {recommended ? <PoiDetailFooter
+            name={recommended.name}
             onCheckDetail={() =>
-              onOpenDetail?.(recommendedPoi)
+              onOpenDetail?.(recommended)
             }
             onDirections={() =>
-              onOpenDirections?.(recommendedPoi)
+              onOpenDirections?.(recommended)
             }
-          />
+          /> : <Text style={styles.sectionHeading}>Buka Explore untuk memuat atau mencoba ulang destinasi.</Text>}
 
           {/* Bottom Carousel Dots */}
           <View style={[styles.dotsRow, { marginTop: 12 }]}>

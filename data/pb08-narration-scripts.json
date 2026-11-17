@@ -1,0 +1,66 @@
+{
+  "source": "Naskah narasi terbaru yang diberikan pengguna",
+  "note": "Naskah disalin sesuai teks pengguna; belum diverifikasi secara independen.",
+  "scripts": [
+    {
+      "poiId": "P01",
+      "name": "Maison Bogerijen",
+      "text": "Selamat datang di Maison Bogerijen, salah satu nama legendaris dalam perjalanan kuliner Jalan Braga.\n\nTempat ini memiliki kisah yang berakar sejak tahun 1929, ketika kawasan Braga menjadi bagian dari kehidupan masyarakat pada masa kolonial Belanda.\n\nMaison Bogerijen dikenal dengan sajian bergaya Eropa, termasuk steak klasik dan es krim vintage yang menjadi ciri khasnya.\n\nDi balik pengalaman bersantap, tempat ini menyimpan cerita tentang perubahan budaya kuliner dari masa ke masa.\n\nSaat menjelajahi Braga, Anda tidak hanya menemukan makanan, tetapi juga jejak sejarah yang melekat pada kawasan ini."
+    },
+    {
+      "poiId": "P02",
+      "name": "Kopi Toko Djawa",
+      "text": "Anda sedang berada di dekat Kopi Toko Djawa, sebuah kedai kopi dengan nuansa vintage dan retro yang khas.\n\nMenariknya, tempat ini dahulu merupakan sebuah toko buku bernama Toko Buku Djawa, sebelum beralih fungsi menjadi kedai kopi.\n\nKini, pengunjung dapat menikmati sajian seperti es kopi awan dan berbagai pilihan pastry sambil merasakan suasana bangunan yang memiliki cerita tersendiri.\n\nPerubahan dari toko buku menjadi kedai kopi memperlihatkan bagaimana ruang-ruang lama di Jalan Braga dapat terus digunakan dengan fungsi yang berbeda.\n\nInilah salah satu cara menarik menikmati Braga, melalui perpaduan cerita masa lalu dan budaya kuliner masa kini."
+    },
+    {
+      "poiId": "P03",
+      "name": "Sweet Cantina",
+      "text": "Jika Anda sedang mencari sesuatu yang manis di tengah perjalanan menyusuri Braga, Sweet Cantina bisa menjadi salah satu pilihan.\n\nTempat ini dikenal dengan sajian es krim artisan dan cookies, serta konsep kedai mungil dengan tampilan yang menarik untuk difoto.\n\nPopularitasnya di media sosial juga menjadi bagian dari daya tarik kuliner modern di kawasan Braga.\n\nBerbeda dari restoran bersejarah yang banyak ditemukan di sekitarnya, Sweet Cantina menghadirkan pengalaman kuliner yang lebih kontemporer.\n\nKehadirannya menunjukkan bahwa Braga bukan hanya tentang bangunan lama dan cerita sejarah, tetapi juga tempat berkembangnya tren kuliner masa kini."
+    },
+    {
+      "poiId": "P04",
+      "name": "Toko Roti Canary",
+      "text": "Di tengah beragam pilihan kuliner Jalan Braga, Toko Roti Canary menghadirkan suasana toko roti klasik yang memiliki cerita panjang.\n\nToko ini dikenal dengan berbagai sajian roti jadul, termasuk varian roti klasik dan baguette yang mengingatkan pada tradisi bakery tempo dulu.\n\nSalah satu daya tariknya adalah upaya mempertahankan resep-resep tradisional yang menjadi bagian dari identitas toko.\n\nBagi pengunjung, tempat seperti ini menawarkan pengalaman yang berbeda dari kedai modern.\n\nMelalui sajian sederhana seperti roti, kita dapat melihat bagaimana tradisi kuliner lama tetap memiliki tempat di tengah perkembangan wisata Bandung."
+    },
+    {
+      "poiId": "P05",
+      "name": "Bacang Panas Braga",
+      "text": "Menjelajahi Jalan Braga pada malam hari tentu tidak lengkap tanpa mengenal ragam jajanan kaki limanya.\n\nSalah satu yang menarik perhatian adalah Bacang Panas Braga, kuliner berupa bacang gurih yang disajikan hangat dengan topping tetelan sapi.\n\nSajian ini dikenal sebagai salah satu pilihan street food malam yang populer di kawasan Braga.\n\nBerbeda dari pengalaman bersantap di restoran, kuliner kaki lima menawarkan cara menikmati makanan yang lebih santai dan sederhana.\n\nJika Anda tertarik mengenal sisi lain wisata kuliner Bandung, Bacang Panas Braga dapat menjadi salah satu destinasi dalam perjalanan malam Anda."
+    },
+    {
+      "poiId": "P06",
+      "name": "Resto Braga",
+      "text": "Selamat datang di Resto Braga, salah satu pilihan tempat bersantap bagi pengunjung yang ingin menikmati hidangan lengkap di kawasan Jalan Braga.\n\nRestoran ini menawarkan beragam menu, mulai dari masakan Nusantara hingga hidangan bergaya Western.\n\nDengan suasana bersantap yang dipadukan bersama karakter arsitektur kawasan Braga, tempat ini dapat menjadi pilihan untuk makan siang maupun makan malam bersama keluarga.\n\nResto Braga memperlihatkan keberagaman pilihan kuliner yang tersedia dalam satu kawasan wisata.\n\nAnda dapat menjadikannya sebagai salah satu titik istirahat sebelum melanjutkan perjalanan untuk menemukan destinasi menarik lainnya di sepanjang Jalan Braga."
+    },
+    {
+      "poiId": "P07",
+      "name": "Braga Permai",
+      "text": "Braga Permai merupakan salah satu restoran bersejarah yang menjadi bagian dari identitas kuliner Jalan Braga.\n\nRestoran ini memiliki jejak sejak masa Hindia Belanda dan dikenal dengan suasana klasik yang masih menjadi daya tariknya.\n\nMenu yang ditawarkan mencakup hidangan khas Eropa, pastry, dan es krim, menghadirkan pengalaman kuliner yang berkaitan erat dengan sejarah kawasan ini.\n\nBraga Permai juga memiliki hubungan sejarah dengan nama Maison Bogerijen, yang tercantum dalam perjalanan eksplorasi BRAGAm.\n\nMelalui restoran ini, pengunjung dapat mengenal bagaimana tradisi bersantap dan suasana kuliner masa lampau tetap menjadi bagian dari pengalaman wisata Braga."
+    },
+    {
+      "poiId": "P08",
+      "name": "Tiramisu Bandung",
+      "text": "Selain menjelajahi restoran dan kedai kopi, perjalanan kuliner di Bandung juga dapat dilengkapi dengan mencari oleh-oleh.\n\nTiramisu Bandung merupakan salah satu destinasi yang menawarkan beragam produk pastry dan kue modern, termasuk sajian bergaya kunafe serta pilihan produk dari UMKM lokal.\n\nTempat ini menghadirkan alternatif bagi wisatawan yang ingin membawa pulang sesuatu setelah menikmati suasana Kota Bandung.\n\nKehadiran pusat oleh-oleh modern turut memperkaya pilihan kuliner yang dapat ditemukan di sekitar kawasan Braga.\n\nBagi Anda yang sedang menyusun itinerary perjalanan, destinasi oleh-oleh seperti ini bisa menjadi salah satu pilihan sebelum mengakhiri kunjungan."
+    },
+    {
+      "poiId": "P09",
+      "name": "Gedung Majestic (De Majestueuz)",
+      "text": "Di antara berbagai destinasi kuliner Jalan Braga, terdapat sebuah bangunan bersejarah yang menyimpan cerita penting tentang dunia perfilman, yaitu Gedung Majestic.\n\nBangunan bergaya Art Deco ini dirancang oleh Wolff Schoemaker dan dibangun pada tahun 1925.\n\nGedung tersebut dikenal melalui sejarahnya sebagai bioskop pada masa awal perkembangan perfilman di Bandung, termasuk kaitannya dengan pemutaran film bisu Loetoeng Kasaroeng pada tahun 1926.\n\nKeberadaan Gedung Majestic memperlihatkan bahwa Jalan Braga memiliki kekayaan budaya yang melampaui wisata kuliner.\n\nSaat berada di sekitarnya, luangkan waktu untuk memperhatikan bagaimana arsitektur bangunan dapat menjadi pengingat perjalanan sejarah hiburan di Bandung."
+    },
+    {
+      "poiId": "P10",
+      "name": "Galeri Seni / Lukisan Jalan Braga",
+      "text": "Ketika berjalan menyusuri trotoar Jalan Braga, Anda dapat menemukan salah satu bentuk ekspresi budaya yang menjadi ciri khas kawasan ini, yaitu karya seni lukis.\n\nJalan Braga telah lama dikenal sebagai ruang bagi para seniman lokal untuk menampilkan karya mereka kepada masyarakat.\n\nBerbagai lukisan yang dipamerkan memperlihatkan bagaimana ruang publik dapat menjadi tempat bertemunya seniman, wisatawan, dan penikmat seni.\n\nTradisi ini telah berlangsung selama puluhan tahun dan menjadi bagian dari identitas budaya Braga.\n\nDi sini, pengalaman eksplorasi tidak hanya berkaitan dengan destinasi kuliner, tetapi juga kesempatan untuk mengenal kreativitas dan kehidupan seni masyarakat Bandung."
+    },
+    {
+      "poiId": "P11",
+      "name": "Braga CityWalk",
+      "text": "Anda sedang mendekati Braga CityWalk, sebuah kompleks yang menggabungkan kegiatan berbelanja, hiburan, dan rekreasi di kawasan Jalan Braga.\n\nTempat ini menghadirkan berbagai fasilitas dalam satu area, mulai dari pusat perbelanjaan hingga pilihan hiburan keluarga.\n\nSalah satu karakteristiknya adalah konsep bangunan modern yang dirancang agar tetap menyatu dengan nuansa arsitektur heritage di sekitarnya.\n\nBraga CityWalk menunjukkan bagaimana kawasan bersejarah dapat terus berkembang untuk mengakomodasi kebutuhan pengunjung masa kini.\n\nJika Anda ingin beristirahat, mencari hiburan, atau melanjutkan aktivitas bersama keluarga, kawasan ini dapat menjadi salah satu pilihan dalam perjalanan eksplorasi Braga."
+    },
+    {
+      "poiId": "P12",
+      "name": "Braga Sky 1957",
+      "text": "Bagi Anda yang ingin menikmati suasana Jalan Braga pada malam hari, Braga Sky 1957 menawarkan pilihan hiburan dengan konsep bersantai.\n\nTempat ini dikenal dengan pertunjukan musik live serta berbagai pilihan minuman dan makanan ringan.\n\nKehadirannya menjadi bagian dari kehidupan malam kawasan Braga, tempat wisatawan maupun warga lokal dapat berkumpul setelah menjalani aktivitas sepanjang hari.\n\nBerbeda dari destinasi sejarah atau kuliner tradisional, tempat hiburan seperti ini memperlihatkan sisi Braga yang lebih modern dan dinamis.\n\nJika Anda tertarik menikmati hiburan malam, Braga Sky 1957 dapat menjadi salah satu pilihan untuk melengkapi perjalanan Anda."
+    }
+  ]
+}

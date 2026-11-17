@@ -45,17 +45,17 @@ export default function PoiTriggerModal({
               <View style={styles.pinBadge}>
                 <Ionicons name="location" size={18} color={COLORS.darkPurple} />
               </View>
-              <Text style={styles.distanceText}>{poi.distance || '12km'}</Text>
+              <Text style={styles.distanceText}>{Number.isFinite(poi.distanceMeters) ? `${Math.round(poi.distanceMeters)} m` : poi.distance || 'Jarak belum tersedia'}</Text>
             </View>
 
             <View style={styles.titleCol}>
               <Text style={styles.poiTitle}>{poi.name}</Text>
               <View style={styles.ratingRow}>
-                <Text style={styles.ratingText}>{poi.rating || '5.0'}</Text>
-                {[1, 2, 3, 4].map((star) => (
+                <Text style={styles.ratingText}>{Number(poi.rating) > 0 ? poi.rating : 'Rating belum tersedia'}</Text>
+                {Number(poi.rating) > 0 && [1, 2, 3, 4, 5].map((star) => (
                   <Ionicons
                     key={star}
-                    name="star"
+                    name={star <= Math.round(Number(poi.rating)) ? 'star' : 'star-outline'}
                     size={14}
                     color={COLORS.darkPurple}
                     style={{ marginLeft: 2 }}

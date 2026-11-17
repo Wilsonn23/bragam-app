@@ -2,7 +2,7 @@ import { useEffect, useMemo, useReducer } from 'react';
 import { GeofenceController } from '../location/geofence';
 
 export function usePoiTriggers(pois, sample, active) {
-  // Source changes intentionally start an isolated demo session.
+  // A new API dataset starts a new controller session.
   const controller = useMemo(() => new GeofenceController(pois), [pois]);
   const [, render] = useReducer(n => n + 1, 0);
   useEffect(() => {

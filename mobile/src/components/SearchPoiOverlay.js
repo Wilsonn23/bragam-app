@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,10 +15,18 @@ import {
   Keyboard,
   Platform,
 } from 'react-native';
+import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from './theme';
-import { PoiFirstImage } from './PoiImageGallery';
-import { API_BASE_URL } from '../config/api';
+import { WireframeImageBox } from './PoiCardComponents';
+
+const BACKEND_PORT = '5000';
+const debuggerHost =
+  Constants.expoConfig?.hostUri ||
+  Constants.manifest2?.extra?.expoGo?.debuggerHost ||
+  Constants.manifest?.debuggerHost;
+const localIp = debuggerHost ? debuggerHost.split(':')[0] : '10.46.161.81';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || `http://${localIp}:${BACKEND_PORT}`;
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 275;
@@ -71,9 +79,8 @@ export default function SearchPoiOverlay({
   const searchInputRef = useRef(null);
 
   const [isExpanded, setIsExpanded] = useState(true);
-  const isExpandedRef = useRef(true);
-  const sheetHeight = useRef(new Animated.Value(0)).current;
-  const currentHeightRef = useRef(EXPANDED_HEIGHT);
+  const [sheetHeight] = useState(() => new Animated.Value(0));
+  const [currentHeight, setCurrentHeight] = useState(EXPANDED_HEIGHT);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -95,8 +102,7 @@ export default function SearchPoiOverlay({
   const animateSheet = (toExpanded) => {
     const target = toExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
     setIsExpanded(toExpanded);
-    isExpandedRef.current = toExpanded;
-    currentHeightRef.current = target;
+    setCurrentHeight(target);
     Animated.spring(sheetHeight, {
       toValue: target,
       useNativeDriver: false,
@@ -111,15 +117,14 @@ export default function SearchPoiOverlay({
       duration: 180,
       useNativeDriver: false,
     }).start(() => {
+      setIsExpanded(true);
+      setCurrentHeight(EXPANDED_HEIGHT);
       onClose?.();
     });
   };
 
   useEffect(() => {
     if (visible) {
-      setIsExpanded(true);
-      isExpandedRef.current = true;
-      currentHeightRef.current = EXPANDED_HEIGHT;
       sheetHeight.setValue(COLLAPSED_HEIGHT);
       Animated.spring(sheetHeight, {
         toValue: EXPANDED_HEIGHT,
@@ -135,20 +140,20 @@ export default function SearchPoiOverlay({
     }
   }, [visible]);
 
-  const panResponder = useRef(
+  const panResponder = useMemo(() =>
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
       onPanResponderGrant: () => {
         Keyboard.dismiss();
       },
       onPanResponderMove: (_, gesture) => {
-        const nextHeight = currentHeightRef.current - gesture.dy;
+        const nextHeight = currentHeight - gesture.dy;
         if (nextHeight >= COLLAPSED_HEIGHT - 70 && nextHeight <= EXPANDED_HEIGHT + 20) {
           sheetHeight.setValue(nextHeight);
         }
       },
       onPanResponderRelease: (_, gesture) => {
-        if (!isExpandedRef.current && gesture.dy > 55) {
+        if (!isExpanded && gesture.dy > 55) {
           handleClose();
           return;
         }
@@ -158,11 +163,11 @@ export default function SearchPoiOverlay({
         } else if (gesture.dy > 40) {
           animateSheet(false);
         } else {
-          animateSheet(currentHeightRef.current > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
+          animateSheet(currentHeight > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
         }
       },
     })
-  ).current;
+  , [currentHeight, isExpanded, sheetHeight, onClose]);
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/categories`)
@@ -190,7 +195,7 @@ export default function SearchPoiOverlay({
     return () => clearTimeout(timer);
   }, [visible, searchQuery, selectedCategory, selectedTime, selectedEnv, selectedRating]);
 
-  const fetchPois = async () => {
+  async function fetchPois() {
     setLoadingPois(true);
     setFetchError('');
     try {
@@ -216,7 +221,7 @@ export default function SearchPoiOverlay({
     } finally {
       setLoadingPois(false);
     }
-  };
+  }
 
   const hasActiveFilters =
     searchQuery !== '' ||
@@ -317,7 +322,7 @@ export default function SearchPoiOverlay({
       style={styles.poiCard}
       onPress={() => handleChoosePoi(item)}
     >
-      <PoiFirstImage poi={item} style={styles.searchImage} />
+      <WireframeImageBox width={82} height={82} />
 
       <View style={styles.poiCardBody}>
         <View style={styles.poiTopRow}>
@@ -409,7 +414,7 @@ export default function SearchPoiOverlay({
             value={searchQuery}
             onChangeText={setSearchQuery}
             onFocus={() => {
-              if (!isExpandedRef.current) animateSheet(true);
+              if (!isExpanded) animateSheet(true);
             }}
           />
           {searchQuery.length > 0 ? (
@@ -571,12 +576,6 @@ export default function SearchPoiOverlay({
 }
 
 const styles = StyleSheet.create({
-  searchImage: {
-    width: 82,
-    height: 82,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.lavenderTint,
-  },
   bottomSheet: {
     position: 'absolute',
     left: 0,

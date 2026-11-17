@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { fetchPois } from './src/poi/api';
-import { BRAGA_POIS } from './src/constants/bragaMapData';
-import { View, StyleSheet, StatusBar, Modal, Text, Pressable, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, StatusBar, Alert, Modal, Text, Pressable, ActivityIndicator } from 'react-native';
 import { useFonts } from 'expo-font';
 import { createRecommendationStore } from './src/recommendations/store';
-import { DEFAULT_FILTERS } from './src/recommendations/model';
+import { DEFAULT_FILTERS, resolveRecommendationDetail } from './src/recommendations/model';
 import { loadRecommendations } from './src/recommendations/service';
 import BottomNavBar from './src/components/BottomNavBar';
 import PoiTriggerModal from './src/components/PoiTriggerModal';
@@ -12,14 +10,20 @@ import HomeScreen from './src/screens/HomeScreen';
 import ExploreScreen from './src/screens/ExploreScreen';
 import TripScreen from './src/screens/TripScreen';
 import AccountScreen from './src/screens/AccountScreen';
+import LoginScreen from './src/screens/LoginScreen';
 import PoiDetailScreen from './src/screens/PoiDetailScreen';
 import NavigationScreen from './src/screens/NavigationScreen';
 import TripRouteSummaryScreen from './src/screens/TripRouteSummaryScreen';
 import BookmarkScreen from './src/screens/BookmarkScreen';
 import { COLORS } from './src/components/theme';
+import { usePois } from './src/poi/PoiProvider';
+import { useAppActive, useForegroundLocation } from './src/hooks/useForegroundLocation';
+import { usePoiTriggers } from './src/hooks/usePoiTriggers';
 
 export default function App() {
   const [fontsReady, fontError] = useFonts({ PB12Jakarta: require('./assets/fonts/PlusJakartaSans.ttf') });
+  const [currentUser, setCurrentUser] = useState(null);
+  const { pois, loading, error } = usePois();
   const [activeTab, setActiveTab] = useState('Home');
   const [recommendationStore] = useState(() => createRecommendationStore(loadRecommendations));
   useEffect(() => () => recommendationStore.cancel(), [recommendationStore]);
@@ -30,6 +34,10 @@ export default function App() {
   const [subScreen, setSubScreen] = useState(null);
   const [selectedPoi, setSelectedPoi] = useState(null);
   const [selectedTrip, setSelectedTrip] = useState(null);
+  const active = useAppActive();
+  const trackingActive = active && !!currentUser && activeTab === 'Explore' && subScreen === null;
+  const gps = useForegroundLocation(trackingActive);
+  const { event, dismiss } = usePoiTriggers(pois, gps.sample, trackingActive);
 
   // State daftar POI yang disimpan ke Bookmark
   const [bookmarkedPois, setBookmarkedPois] = useState([]);
@@ -41,22 +49,6 @@ export default function App() {
   const [fullHeight, setFullHeight] = useState(0);
   const [currentHeight, setCurrentHeight] = useState(0);
   const [navHeight, setNavHeight] = useState(0);
-
-  const [pois, setPois] = useState(BRAGA_POIS);
-
-  useEffect(() => {
-    let isMounted = true;
-    fetchPois()
-      .then((data) => {
-        if (isMounted && Array.isArray(data) && data.length > 0) {
-          setPois(data);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const isPoiBookmarked = (targetPoi) => {
     if (!targetPoi) return false;
@@ -118,8 +110,29 @@ export default function App() {
   const windowShrink =
     fullHeight > 0 && currentHeight > 0 ? Math.max(0, fullHeight - currentHeight) : 0;
 
+  const clearRecommendations = () => {
+    recommendationStore.reset();
+    setExploreView({ activeSegment: 'nearby', filters: { ...DEFAULT_FILTERS } });
+  };
+
+  const handleLogin = (user) => { clearRecommendations(); setCurrentUser(user); };
+  const handleLogout = () => { clearRecommendations(); setCurrentUser(null); };
+
   const handleOpenDetail = (poi) => {
-    setSelectedPoi(poi);
+    if (poi?.recommendationPoiId === poi?.id && typeof poi?.id === 'string') {
+      setSelectedPoi(resolveRecommendationDetail(poi, pois));
+      setSubScreen('PoiDetail');
+      return;
+    }
+    // Main's prototype cards still use different IDs; resolve only an unambiguous API record.
+    const byId = pois.find(item => item.id === poi?.id);
+    const byName = pois.filter(item => item.name.toLowerCase() === poi?.name?.toLowerCase());
+    const selected = byId || (byName.length === 1 ? byName[0] : null);
+    if (!selected) {
+      Alert.alert('Destinasi belum tersedia', loading ? 'Data destinasi sedang dimuat.' : error || 'Data detail destinasi tidak ditemukan.');
+      return;
+    }
+    setSelectedPoi(selected);
     setSubScreen('PoiDetail');
   };
 
@@ -174,6 +187,7 @@ export default function App() {
     if (subScreen === 'Navigation') {
       return (
         <NavigationScreen
+          key={selectedPoi?.id || selectedPoi?.name}
           poi={selectedPoi}
           pois={pois}
           onBack={() => setSubScreen(null)}
@@ -197,13 +211,13 @@ export default function App() {
             pois={pois}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
-            onOpenBookmarks={handleOpenBookmarks}
             onUseTrip={handleUseTrip}
           />
         );
       case 'Explore':
         return (
           <ExploreScreen
+            gps={gps}
             recommendationStore={recommendationStore}
             exploreView={exploreView}
             onExploreViewChange={setExploreView}
@@ -226,26 +240,30 @@ export default function App() {
       case 'Trip':
         return <TripScreen onUseTrip={handleUseTrip} />;
       case 'Account':
-        return <AccountScreen />;
+        return <AccountScreen user={currentUser} onLogout={handleLogout} />;
       default:
-        return <HomeScreen pois={pois} />;
+        return <HomeScreen pois={pois} onOpenDetail={handleOpenDetail} onOpenDirections={handleOpenDirections} onUseTrip={handleUseTrip} />;
     }
   };
 
-  const showBottomNav = subScreen !== 'PoiDetail';
+  const visiblePoi = event ? { ...event.poi, distanceMeters: event.distanceMeters } : geofencePoi;
+  const closePoi = () => { if (event) dismiss(); else setGeofencePoi(null); };
 
+  const showBottomNav = subScreen !== 'PoiDetail';
   const isLightStatusBar =
     subScreen === null && (activeTab === 'Home' || activeTab === 'Account');
 
   if (!fontsReady && !fontError) return <View style={styles.fontLoading}>
     <ActivityIndicator accessibilityLabel="Memuat tampilan" color={COLORS.primaryPurple} />
   </View>;
+  if (!currentUser) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
 
   return (
     <View onLayout={handleContainerLayout} style={styles.container}>
       <StatusBar
         barStyle={isLightStatusBar ? 'light-content' : 'dark-content'}
-        backgroundColor={isLightStatusBar ? COLORS.primaryPurple : COLORS.softLilacBg}
       />
 
       <View
@@ -282,17 +300,17 @@ export default function App() {
         </View>
       </Modal>
       <PoiTriggerModal
-        visible={Boolean(geofencePoi)}
-        poi={geofencePoi}
-        onSave={handleToggleSavePoi}
-        onAddToItinerary={handleAddToItinerary}
-        onClose={() => setGeofencePoi(null)}
+        visible={Boolean(visiblePoi)}
+        poi={visiblePoi}
+        onClose={closePoi}
+        onSave={undefined}
+        onAddToItinerary={undefined}
         onCheckNow={(poi) => {
-          setGeofencePoi(null);
+          closePoi();
           handleOpenDetail(poi);
         }}
         onDirections={(poi) => {
-          setGeofencePoi(null);
+          closePoi();
           handleOpenDirections(poi);
         }}
       />

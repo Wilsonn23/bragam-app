@@ -54,7 +54,7 @@ test('missing photos/rating/reviews/location remain unknown, never example value
   assert.equal(reviewedRating({ rating: 9, reviews_count: 2 }), null);
   assert.equal(distanceLabel(payload.items[0].poi, null), 'Jarak belum tersedia');
   assert.equal(distanceLabel({}, { latitude: 0, longitude: 0 }), 'Jarak belum tersedia');
-  assert.equal(poiForDetail(payload.items[2], null).rating, 'Belum ada ulasan');
+  assert.equal(poiForDetail(payload.items[2], null).rating, null);
   assert.equal(poiForDetail(payload.items[2], null).imageUrl, undefined);
 });
 
@@ -135,4 +135,45 @@ test('transport timeout aborts a hung request and propagates an error for retry'
       signal.addEventListener('abort', () => reject(new Error('ABORTED')), { once: true });
     }) });
   await assert.rejects(service(), /ABORTED/);
+});
+
+test('current backend metadata survives recommendation → detail and audio handoff', () => {
+  const { toPoiResponse } = require('../../backend/poiResponse');
+  const { adaptPois } = require('../src/poi/adapter');
+  const { getPoiDetailFields } = require('../src/poi/presentation');
+  const { audioSourceFor } = require('../src/audio/guideController');
+  const response = toPoiResponse({id:'P03',name:'Sweet Cantina',category:'Dessert',latitude:-6.91685,
+    longitude:107.60895,radius_meters:10,description:'Deskripsi dari POI',rating:'4.5',reviews_count:890,
+    history:'Sejarah destinasi',audio_guide_url:'https://example.test/P03.mp3'});
+  const [poi] = adaptPois([response]);
+  const item = adaptRecommendations({items:[{poi:{...poi,imageUrls:['https://example.test/P03.jpg']}}]}).items[0];
+  const detail = poiForDetail(item,{latitude:-6.91685,longitude:107.60895});
+  assert.equal(detail.id,'P03');assert.equal(detail.rating,4.5);assert.equal(detail.reviewsCount,890);
+  assert.equal(getPoiDetailFields(detail).ratingSummary,'4.5 / 5 (890 ulasan)');
+  assert.equal(getPoiDetailFields(detail).description,'Deskripsi dari POI');
+  assert.equal(audioSourceFor(detail),'https://example.test/P03.mp3');
+  assert.deepEqual(detail.imageUrls,['https://example.test/P03.jpg']);
+});
+
+test('canonical metadata enrichment preserves rank and never substitutes a same-name ID', () => {
+  const { resolveRecommendationDetail } = require('../src/recommendations/model');
+  const catalogue = [{id:'P01',name:'Same name',history:'Canonical history',reviewsCount:8,rating:4.2}];
+  const result = resolveRecommendationDetail({id:'P01',name:'Same name',history:undefined}, catalogue);
+  assert.equal(result.id,'P01');assert.equal(result.history,'Canonical history');
+  assert.equal(resolveRecommendationDetail({id:'P99',name:'Same name'},catalogue).id,'P99');
+  assert.equal(resolveRecommendationDetail({name:'Same name'},catalogue),null);
+});
+
+test('reset on login/logout clears session data and invalidates in-flight responses', async () => {
+  const old=deferred();const store=createRecommendationStore(()=>old.promise);
+  const work=store.load();store.setScrollOffset(250);store.reset();
+  old.resolve(payload);await work;
+  assert.equal(store.getSnapshot().status,'idle');assert.equal(store.getSnapshot().source,'service');
+  assert.equal(store.getScrollOffset(),0);assert.deepEqual(store.getSnapshot().items,[]);
+});
+
+test('canonical review counts take priority and invalid counts never manufacture ratings', () => {
+  assert.equal(reviewedRating({rating:4.5,reviewsCount:0,reviews_count:100}),null);
+  assert.equal(reviewedRating({rating:4.5,reviewsCount:1.5}),null);
+  assert.deepEqual(reviewedRating({rating:4.5,reviewsCount:100}),{value:4.5,count:100});
 });

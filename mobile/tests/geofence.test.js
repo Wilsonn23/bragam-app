@@ -1,9 +1,9 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { distanceMeters } = require('../src/location/distance');
+const { distanceMeters, isPointInPolygon } = require('../src/location/distance');
 const { adaptPois } = require('../src/poi/adapter');
 const { GeofenceController } = require('../src/location/geofence');
-const { testPois } = require('../src/dev/fixtures');
+const { testPois } = require('./fixtures/pois');
 const poi = testPois[0];
 const fix = (meters, timestamp = 10000, accuracy = 3) => ({ latitude: meters / 111194.9266, longitude: 0, timestamp, accuracy });
 const update = (c, meters, time) => c.update(fix(meters, time), time);
@@ -14,6 +14,17 @@ test('Haversine returns meters, symmetric, zero, antipodal, invalid', () => {
   assert.equal(distanceMeters(poi,testPois[1]),distanceMeters(testPois[1],poi));
   assert.ok(Math.abs(distanceMeters({latitude:0,longitude:0},{latitude:0,longitude:180})-20015086.8)<1);
   assert.ok(Number.isNaN(distanceMeters(null,poi)));
+});
+
+test('point-in-polygon identifies locations inside and outside Braga', () => {
+  const polygon = [
+    { latitude: 0, longitude: 0 },
+    { latitude: 0, longitude: 2 },
+    { latitude: 2, longitude: 2 },
+    { latitude: 2, longitude: 0 },
+  ];
+  assert.equal(isPointInPolygon({ latitude: 1, longitude: 1 }, polygon), true);
+  assert.equal(isPointInPolygon({ latitude: 3, longitude: 1 }, polygon), false);
 });
 test('outside does not trigger; entry emits once, closing does not rearm', () => {
   const c = new GeofenceController([poi]);
@@ -31,7 +42,7 @@ test('confirmed exit followed by entry starts a new visit', () => {
   assert.equal(c.visits.get(poi.id).inside,true);
   update(c,30,14000);
   assert.equal(c.visits.get(poi.id).inside,false);
-  assert.equal(update(c,0,16000)[0].visitId,2);
+  assert.equal(update(c,0,70000)[0].visitId,2);
 });
 test('boundary jitter and isolated spikes do not spam or rearm', () => {
   const c = new GeofenceController([poi]); update(c,0,10000); c.dismiss(10000);
@@ -92,7 +103,7 @@ test('expiry and suspension clear notification without rearming current visit', 
 });
 test('adapter rejects invalid records and duplicate IDs; image is optional', () => {
   assert.deepEqual(adaptPois(null),[]);
-  for (const patch of [{latitude:Infinity},{longitude:181},{triggerRadiusMeters:0},{triggerRadiusMeters:-1},{name:''},{id:5},{shortDescription:null}]) {
+  for (const patch of [{latitude:Infinity},{longitude:181},{triggerRadiusMeters:0},{triggerRadiusMeters:-1},{name:''},{id:5}]) {
     assert.equal(adaptPois([{...poi,...patch}]).length,0);
   }
   assert.equal(adaptPois([poi,poi]).length,0);

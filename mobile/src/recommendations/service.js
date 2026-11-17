@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '../config/api';
+import { API_BASE_URL } from '../poi/api';
 import { createRecommendationService } from './transport';
 
 export const loadRecommendations = createRecommendationService({
