@@ -209,3 +209,24 @@ Response berhasil: `204 No Content`.
 | `404` | Data tidak ditemukan |
 | `409` | Email sudah terdaftar |
 | `500` | Query database gagal |
+
+## POI uji coba lokal
+
+Untuk uji peta/Nearby, pencarian, detail, dan notifikasi GPS, isi `backend/.env`:
+
+```env
+LOCAL_TEST_POI_ENABLED=true
+LOCAL_TEST_POI_LATITUDE=-6.890389
+LOCAL_TEST_POI_LONGITUDE=107.609583
+LOCAL_TEST_POI_SOURCE_ID=P11
+```
+
+Dengan `LOCAL_TEST_POI_SOURCE_ID=P11`, `TEST-LOCAL` menjadi **Braga CityWalk (Uji Lokal)**: metadata, radius, cooldown, rating, detail dan foto dibaca dari Citywalk asli (`P11`), sedangkan koordinat menggunakan konfigurasi uji di atas. POI asli tetap berada di koordinat aslinya. Salinan memakai URL foto yang sama tanpa membuat baris gambar baru. Endpoint katalog, kategori, pencarian/filter, nearby, detail dan galeri menerima ID salinan yang sama.
+
+Pada mobile development, audio `TEST-LOCAL` memakai rekaman `poi11.mp3` milik Citywalk; alias ini tidak aktif pada bundle produksi. Save dan Directions memakai handler POI yang sama dengan destinasi lain; itinerary tetap mengikuti ketersediaan integrasi aplikasi, bukan mengumumkan penyimpanan palsu.
+
+Restart backend setelah mengubah konfigurasi, lalu reload aplikasi agar PoiProvider mengambil ulang katalog. Implementasi ini hanya menjalankan SELECT, tidak menambah/mengubah data POI di database bersama. Jika sumber P11 tidak tersedia, request gagal secara eksplisit dan tidak menggantinya dengan POI generik. Hapus `LOCAL_TEST_POI_SOURCE_ID` untuk memakai fixture generik yang sudah tersedia sebelumnya. `LOCAL_TEST_POI_ENABLED=false` menonaktifkan keduanya; mode production selalu menonaktifkannya.
+
+Tanpa source ID, fixture generik bernama **POI Uji Coba Lokal** (`TEST-LOCAL`)
+memakai radius 15 meter dan cooldown 60 detik, tanpa foto/audio. POI lokal ini
+bukan hasil engine rekomendasi PB11.

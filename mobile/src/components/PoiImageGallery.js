@@ -171,6 +171,7 @@ export default function PoiImageGallery({ poi, compact = false }) {
 }
 
 const styles = StyleSheet.create({
+  firstPlaceholder: { backgroundColor: COLORS.lavenderTint },
   gallery: { flexDirection: 'row', gap: 10, height: 232 },
   singleImage: {
     width: '100%',

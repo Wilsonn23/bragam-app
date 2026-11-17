@@ -44,4 +44,9 @@ export const theme = {
   border: COLORS.borderSubtle,
 };
 
+export const POI_NOTIFICATION = {
+  surface: '#F9F7FF', border: '#602ECC', ink: '#3A1678',
+  backdrop: 'rgba(34, 24, 51, 0.5)', tint: '#E7DAFF', radius: 32, borderWidth: 4,
+};
+
 export default theme;
