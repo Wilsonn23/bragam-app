@@ -1,4 +1,5 @@
 const express = require('express');
+const { toPoiResponse } = require('../poiResponse');
 
 const router = express.Router();
 
@@ -6,7 +7,9 @@ router.get('/pois', async (req, res, next) => {
   try {
     const result = await req.db.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
-             description, history, image_url, notification_title, notification_body,
+             description, address, history, opening_hours, menu_highlights,
+             price_min, price_max, rating, reviews_count,
+             image_url, notification_title, notification_body,
              cooldown_seconds, audio_guide_url
       FROM pois
       ORDER BY id
@@ -120,7 +123,9 @@ router.get('/pois/nearby', async (req, res, next) => {
   try {
     const result = await req.db.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
-             description, history, notification_title, audio_guide_url,
+             description, address, history, opening_hours, menu_highlights,
+             price_min, price_max, rating, reviews_count,
+             image_url, notification_title, notification_body, cooldown_seconds, audio_guide_url,
              ST_Distance(
                location::geography,
                ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
@@ -172,7 +177,9 @@ router.get('/pois/:id', async (req, res, next) => {
   try {
     const result = await req.db.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
-             description, history, image_url, notification_title, audio_guide_url
+             description, address, history, opening_hours, menu_highlights,
+             price_min, price_max, rating, reviews_count,
+             image_url, notification_title, notification_body, cooldown_seconds, audio_guide_url
       FROM pois
       WHERE id = $1
       LIMIT 1
@@ -189,32 +196,6 @@ router.get('/pois/:id', async (req, res, next) => {
   }
 });
 
-function toPoiResponse(row) {
-  const images = Array.isArray(row.images) ? row.images : [];
-  const legacyImageUrl = typeof row.image_url === 'string' &&
-    /^https?:\/\//i.test(row.image_url) ? row.image_url : undefined;
-  const imageUrl = images[0]?.imageUrl || legacyImageUrl;
-
-  return {
-    id: row.id,
-    name: row.name,
-    category: row.category,
-    latitude: Number(row.latitude),
-    longitude: Number(row.longitude),
-    triggerRadiusMeters: Number(row.radius_meters),
-    cooldownSeconds: row.cooldown_seconds === undefined ? 60 : Number(row.cooldown_seconds),
-    description: row.description || '',
-    shortDescription: row.description || '',
-    history: row.history || '',
-    imageUrl,
-    images,
-    notificationTitle: row.notification_title || '',
-    notificationBody: row.notification_body === undefined ? null : row.notification_body,
-    audioGuideUrl: row.audio_guide_url || undefined,
-    distanceMeters: row.distance_meters === undefined ? undefined : Number(row.distance_meters),
-  };
-}
-
 async function withImages(db, rows) {
   if (!rows.length) return rows;
 
@@ -223,7 +204,7 @@ async function withImages(db, rows) {
     SELECT id, poi_id, image_url, alt_text, sort_order
     FROM poi_images
     WHERE poi_id = ANY($1::varchar[])
-    ORDER BY poi_id, sort_order, id /* notification_body cooldown_seconds */
+    ORDER BY poi_id, sort_order, id
   `, [poiIds]);
 
   const imagesByPoi = new Map();

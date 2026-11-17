@@ -6,6 +6,10 @@ function optionalNumber(value) {
 }
 
 function toPoiResponse(row) {
+  const images = Array.isArray(row.images) ? row.images : [];
+  const legacyImageUrl = typeof row.image_url === 'string' &&
+    /^https?:\/\//i.test(row.image_url) ? row.image_url : undefined;
+
   return {
     id: row.id,
     name: row.name,
@@ -24,6 +28,8 @@ function toPoiResponse(row) {
     priceMax: optionalNumber(row.price_max),
     rating: optionalNumber(row.rating),
     reviewsCount: optionalNumber(row.reviews_count),
+    imageUrl: images[0]?.imageUrl || legacyImageUrl,
+    images,
     notificationTitle: row.notification_title || '',
     notificationBody: row.notification_body === undefined ? null : row.notification_body,
     audioGuideUrl: row.audio_guide_url || undefined,
