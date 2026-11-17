@@ -10,13 +10,28 @@ import {
 } from 'react-native';
 import { COLORS, RADIUS } from './theme';
 
+function renderableImageUrl(value) {
+  if (typeof value !== 'string' || !/^https?:\/\//i.test(value)) return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.hostname === 'thumb.wikimedia.org' || parsed.hostname === 'upload.wikimedia.org') {
+      const source = value.replace(/^https?:\/\//i, '').replace(/&/g, '%26');
+      return `https://images.weserv.nl/?url=${source}`;
+    }
+  } catch {
+    return null;
+  }
+  return value;
+}
+
 function validImageUrls(poi) {
   const images = Array.isArray(poi?.images) ? poi.images : [];
   const urls = images
-    .map((image) => image?.imageUrl)
-    .filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
-  if (typeof poi?.imageUrl === 'string' && /^https?:\/\//i.test(poi.imageUrl)) {
-    urls.unshift(poi.imageUrl);
+    .map((image) => renderableImageUrl(image?.imageUrl))
+    .filter(Boolean);
+  const primaryUrl = renderableImageUrl(poi?.imageUrl);
+  if (primaryUrl) {
+    urls.unshift(primaryUrl);
   }
   return [...new Set(urls)];
 }
