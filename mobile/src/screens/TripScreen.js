@@ -5,8 +5,10 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
+  Platform,
+  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 
@@ -36,6 +38,14 @@ const INITIAL_PLANS = [
 ];
 
 export default function TripScreen({ onUseTrip }) {
+  const insets = useSafeAreaInsets();
+  const topInset =
+    insets.top > 0
+      ? insets.top
+      : Platform.OS === 'android'
+      ? StatusBar.currentHeight || 28
+      : 44;
+
   const [expandedPlanId, setExpandedPlanId] = useState('plan-1');
 
   const toggleExpand = (planId) => {
@@ -43,9 +53,9 @@ export default function TripScreen({ onUseTrip }) {
   };
 
   return (
-    <SafeAreaView style={styles.root}>
+    <View style={styles.root}>
       {/* Top Header */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: topInset + 12 }]}>
         <TouchableOpacity activeOpacity={0.7} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={COLORS.darkPurple} />
         </TouchableOpacity>
@@ -166,7 +176,7 @@ export default function TripScreen({ onUseTrip }) {
         <Text style={styles.fabCreateText}>Buat Rencana</Text>
         <Ionicons name="add" size={22} color={COLORS.darkPurple} style={{ marginLeft: 4 }} />
       </TouchableOpacity>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -179,7 +189,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderSubtle,
     backgroundColor: COLORS.softLilacBg,
