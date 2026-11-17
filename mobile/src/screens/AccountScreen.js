@@ -4,11 +4,13 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   Animated,
   Dimensions,
   PanResponder,
+  Platform,
+  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Line } from 'react-native-svg';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
@@ -18,11 +20,20 @@ const COLLAPSED_HEIGHT = 220;
 const MAX_SHEET_HEIGHT = Math.min(SCREEN_HEIGHT * 0.4, 300);
 
 export default function AccountScreen({ user, onLogout }) {
+  const insets = useSafeAreaInsets();
+  const topInset =
+    insets.top > 0
+      ? insets.top
+      : Platform.OS === 'android'
+      ? StatusBar.currentHeight || 28
+      : 44;
+
   const displayName = user?.name?.trim() || 'Pengguna BRAGAm';
   const displayEmail = user?.email || 'Email belum tersedia';
   const [sheetHeight] = useState(() => new Animated.Value(MAX_SHEET_HEIGHT));
   const startHeight = useRef(MAX_SHEET_HEIGHT);
   const currentHeight = useRef(MAX_SHEET_HEIGHT);
+
   const animateSheet = (height) => {
     currentHeight.current = height;
     Animated.spring(sheetHeight, {
@@ -31,32 +42,41 @@ export default function AccountScreen({ user, onLogout }) {
       bounciness: 3,
     }).start();
   };
+
   // PanResponder callbacks must retain mutable gesture state in refs.
   // eslint-disable-next-line react-hooks/refs
-  const panResponder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
-    onPanResponderGrant: () => {
-      startHeight.current = currentHeight.current;
-    },
-    onPanResponderMove: (_, gesture) => {
-      const nextHeight = Math.max(
-        COLLAPSED_HEIGHT,
-        Math.min(MAX_SHEET_HEIGHT, startHeight.current - gesture.dy)
-      );
-      currentHeight.current = nextHeight;
-      sheetHeight.setValue(nextHeight);
-    },
-    onPanResponderRelease: (_, gesture) => {
-      animateSheet(gesture.dy > 40 || currentHeight.current < (COLLAPSED_HEIGHT + MAX_SHEET_HEIGHT) / 2
-        ? COLLAPSED_HEIGHT
-        : MAX_SHEET_HEIGHT);
-    },
-  }), [animateSheet, sheetHeight]);
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
+        onPanResponderGrant: () => {
+          startHeight.current = currentHeight.current;
+        },
+        onPanResponderMove: (_, gesture) => {
+          const nextHeight = Math.max(
+            COLLAPSED_HEIGHT,
+            Math.min(MAX_SHEET_HEIGHT, startHeight.current - gesture.dy)
+          );
+          currentHeight.current = nextHeight;
+          sheetHeight.setValue(nextHeight);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          animateSheet(
+            gesture.dy > 40 ||
+              currentHeight.current < (COLLAPSED_HEIGHT + MAX_SHEET_HEIGHT) / 2
+              ? COLLAPSED_HEIGHT
+              : MAX_SHEET_HEIGHT
+          );
+        },
+      }),
+    [animateSheet, sheetHeight]
+  );
+
   return (
     <View style={styles.root}>
       {/* Upper Purple Profile Section */}
-      <SafeAreaView style={styles.headerSection}>
+      <View style={[styles.headerSection, { paddingTop: topInset }]}>
         <View style={styles.topRow}>
           <Text style={styles.headerTitle}>Pengaturan Akun</Text>
           <View style={styles.topActions}>
@@ -69,7 +89,11 @@ export default function AccountScreen({ user, onLogout }) {
               style={styles.logoutCircleBtn}
               accessibilityLabel="Keluar akun"
             >
-              <MaterialCommunityIcons name="exit-to-app" size={21} color={COLORS.darkPurple} />
+              <MaterialCommunityIcons
+                name="exit-to-app"
+                size={21}
+                color={COLORS.darkPurple}
+              />
             </TouchableOpacity>
           </View>
         </View>
@@ -111,7 +135,7 @@ export default function AccountScreen({ user, onLogout }) {
             style={{ marginLeft: 6 }}
           />
         </TouchableOpacity>
-      </SafeAreaView>
+      </View>
 
       {/* Bottom Sheet Settings Menu */}
       <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
@@ -138,7 +162,6 @@ export default function AccountScreen({ user, onLogout }) {
           </View>
           <Ionicons name="chevron-forward" size={20} color={COLORS.darkPurple} />
         </TouchableOpacity>
-
       </Animated.View>
     </View>
   );

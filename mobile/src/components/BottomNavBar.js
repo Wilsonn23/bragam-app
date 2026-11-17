@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from './theme';
 
@@ -11,6 +12,8 @@ const TABS = [
 ];
 
 export default function BottomNavBar({ activeTab, onSelectTab }) {
+  const insets = useSafeAreaInsets();
+
   const renderIcon = (key, isActive) => {
     const color = COLORS.white;
     const size = 24;
@@ -54,7 +57,12 @@ export default function BottomNavBar({ activeTab, onSelectTab }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        { paddingBottom: Math.max(insets.bottom, 12) },
+      ]}
+    >
       {TABS.map((tab) => {
         const isActive = activeTab === tab.key;
         return (
@@ -83,9 +91,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.darkPurple,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 22 : 10,
+    paddingTop: 10,
     paddingHorizontal: 12,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
   },
   tabItem: {
     alignItems: 'center',

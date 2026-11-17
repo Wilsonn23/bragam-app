@@ -5,8 +5,10 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
+  Platform,
+  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 import { PoiDetailFooter } from '../components/PoiCardComponents';
@@ -21,14 +23,24 @@ export default function HomeScreen({
   pois,
   onOpenDetail,
   onOpenDirections,
+  onOpenBookmarks,
   onUseTrip,
 }) {
+  const insets = useSafeAreaInsets();
+  const topInset =
+    insets.top > 0
+      ? insets.top
+      : Platform.OS === 'android'
+      ? StatusBar.currentHeight || 28
+      : 44;
+
   const recommended = pois?.[0];
+
   return (
     <View style={styles.root}>
       {/* Top Purple Header */}
-      <SafeAreaView style={styles.headerArea}>
-        <View style={styles.headerContent}>
+      <View style={styles.headerArea}>
+        <View style={[styles.headerContent, { paddingTop: topInset + 14 }]}>
           <View style={{ flex: 1, paddingRight: 12 }}>
             <Text style={styles.greetingTitle}>Hi, User!</Text>
             <Text style={styles.greetingSubtitle}>
@@ -40,12 +52,16 @@ export default function HomeScreen({
             <TouchableOpacity activeOpacity={0.8} style={styles.circleIconBtn}>
               <Ionicons name="notifications" size={20} color={COLORS.darkPurple} />
             </TouchableOpacity>
-            <TouchableOpacity activeOpacity={0.8} style={styles.circleIconBtn}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={onOpenBookmarks}
+              style={styles.circleIconBtn}
+            >
               <Ionicons name="bookmark" size={19} color={COLORS.darkPurple} />
             </TouchableOpacity>
           </View>
         </View>
-      </SafeAreaView>
+      </View>
 
       {/* Main White Rounded Sheet */}
       <View style={styles.sheetContainer}>
@@ -173,15 +189,17 @@ export default function HomeScreen({
 
           {recommended ? <PoiFirstImage poi={recommended} style={styles.recommendationImage} /> : null}
 
-          {recommended ? <PoiDetailFooter
-            name={recommended.name}
-            onCheckDetail={() =>
-              onOpenDetail?.(recommended)
-            }
-            onDirections={() =>
-              onOpenDirections?.(recommended)
-            }
-          /> : <Text style={styles.sectionHeading}>Buka Explore untuk memuat atau mencoba ulang destinasi.</Text>}
+          {recommended ? (
+            <PoiDetailFooter
+              name={recommended.name}
+              onCheckDetail={() => onOpenDetail?.(recommended)}
+              onDirections={() => onOpenDirections?.(recommended)}
+            />
+          ) : (
+            <Text style={styles.sectionHeading}>
+              Buka Explore untuk memuat atau mencoba ulang destinasi.
+            </Text>
+          )}
 
           {/* Bottom Carousel Dots */}
           <View style={[styles.dotsRow, { marginTop: 12 }]}>
@@ -207,14 +225,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.lavenderTint,
   },
   headerArea: {
-    backgroundColor: COLORS.darkPurple,
+    backgroundColor: COLORS.primaryPurple,
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: 22,
-    paddingTop: 18,
     paddingBottom: 24,
     backgroundColor: COLORS.primaryPurple,
   },
