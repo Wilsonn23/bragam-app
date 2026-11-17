@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, StatusBar, Alert } from 'react-native';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import BottomNavBar from './src/components/BottomNavBar';
 import PoiTriggerModal from './src/components/PoiTriggerModal';
 import HomeScreen from './src/screens/HomeScreen';
@@ -16,7 +17,7 @@ import { usePois } from './src/poi/PoiProvider';
 import { useAppActive, useForegroundLocation } from './src/hooks/useForegroundLocation';
 import { usePoiTriggers } from './src/hooks/usePoiTriggers';
 
-export default function App() {
+function MainApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const { pois, loading, error } = usePois();
   const active = useAppActive();
@@ -49,7 +50,6 @@ export default function App() {
     );
   };
 
-  // Menambahkan POI ke Bookmark (atau menghapus jika ditekan kembali)
   const handleToggleSavePoi = (targetPoi) => {
     if (!targetPoi) return;
     setBookmarkedPois((prev) => {
@@ -71,7 +71,6 @@ export default function App() {
     });
   };
 
-  // Menghapus POI setelah konfirmasi "Ya" pada halaman Bookmark
   const handleRemoveBookmark = (targetPoi) => {
     if (!targetPoi) return;
     setBookmarkedPois((prev) =>
@@ -104,12 +103,14 @@ export default function App() {
     fullHeight > 0 && currentHeight > 0 ? Math.max(0, fullHeight - currentHeight) : 0;
 
   const handleOpenDetail = (poi) => {
-    // Main's prototype cards still use different IDs; resolve only an unambiguous API record.
     const byId = pois.find(item => item.id === poi?.id);
     const byName = pois.filter(item => item.name.toLowerCase() === poi?.name?.toLowerCase());
     const selected = byId || (byName.length === 1 ? byName[0] : null);
     if (!selected) {
-      Alert.alert('Destinasi belum tersedia', loading ? 'Data destinasi sedang dimuat.' : error || 'Data detail destinasi tidak ditemukan.');
+      Alert.alert(
+        'Destinasi belum tersedia',
+        loading ? 'Data destinasi sedang dimuat.' : error || 'Data detail destinasi tidak ditemukan.'
+      );
       return;
     }
     setSelectedPoi(selected);
@@ -217,7 +218,13 @@ export default function App() {
       case 'Account':
         return <AccountScreen user={currentUser} onLogout={() => setCurrentUser(null)} />;
       default:
-        return <HomeScreen onOpenDetail={handleOpenDetail} onOpenDirections={handleOpenDirections} onUseTrip={handleUseTrip} />;
+        return (
+          <HomeScreen
+            onOpenDetail={handleOpenDetail}
+            onOpenDirections={handleOpenDirections}
+            onUseTrip={handleUseTrip}
+          />
+        );
     }
   };
 
@@ -276,6 +283,14 @@ export default function App() {
         }}
       />
     </View>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      <MainApp />
+    </SafeAreaProvider>
   );
 }
 

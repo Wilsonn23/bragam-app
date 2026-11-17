@@ -60,7 +60,9 @@ export default function BottomNavBar({ activeTab, onSelectTab }) {
     <View
       style={[
         styles.container,
-        { paddingBottom: Math.max(insets.bottom, 12) },
+        {
+          paddingBottom: insets.bottom > 0 ? insets.bottom + 8 : 16,
+        },
       ]}
     >
       {TABS.map((tab) => {
@@ -91,7 +93,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.darkPurple,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingTop: 10,
+    paddingTop: 8,
     paddingHorizontal: 12,
     elevation: 10,
     shadowColor: '#000',
@@ -102,7 +104,7 @@ const styles = StyleSheet.create({
   tabItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
+    paddingVertical: 4,
     paddingHorizontal: 16,
     borderRadius: 16,
     minWidth: 72,
