@@ -5,13 +5,14 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
   Animated,
   PanResponder,
   Dimensions,
   Platform,
   Alert,
+  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, {
   Marker,
   Polygon,
@@ -21,7 +22,7 @@ import MapView, {
 import * as Location from 'expo-location';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
-import { WireframeImageBox, PoiDetailFooter } from '../components/PoiCardComponents';
+import { PoiDetailFooter } from '../components/PoiCardComponents';
 import PoiImageGallery from '../components/PoiImageGallery';
 import SearchPoiOverlay from '../components/SearchPoiOverlay';
 import {
@@ -31,6 +32,7 @@ import {
   BRAGA_GRAY_MAP_STYLE,
 } from '../constants/bragaMapData';
 import { useAppActive, useForegroundLocation } from '../hooks/useForegroundLocation';
+import { distanceMeters } from '../location/distance';
 
 // Sesuaikan IP komputer & PORT dengan yang ada di backend/.env
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000';
@@ -82,26 +84,69 @@ function isPointInPolygon(point, polygon) {
   return inside;
 }
 
-function normalizePoiItem(item) {
-  const localMeta = BRAGA_POIS.find((b) => b.id === item.id);
+function formatDistanceText(meters) {
+  if (!Number.isFinite(meters)) return 'Jarak belum tersedia';
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+function normalizePoiItem(item, userCoord = null, existingPois = []) {
+  const localMeta = BRAGA_POIS.find((b) => String(b.id) === String(item.id));
+  const parentPoi = existingPois.find((p) => String(p.id) === String(item.id));
+
   const lat = Number(
-    item.coordinate?.latitude ?? item.latitude ?? item.lat ?? localMeta?.latitude
+    item.coordinate?.latitude ??
+      item.latitude ??
+      item.lat ??
+      parentPoi?.latitude ??
+      localMeta?.latitude
   );
   const lng = Number(
-    item.coordinate?.longitude ?? item.longitude ?? item.lng ?? localMeta?.longitude
+    item.coordinate?.longitude ??
+      item.longitude ??
+      item.lng ??
+      parentPoi?.longitude ??
+      localMeta?.longitude
   );
+
+  const validLat = Number.isFinite(lat) ? lat : BRAGA_REGION.latitude;
+  const validLng = Number.isFinite(lng) ? lng : BRAGA_REGION.longitude;
+
+  let computedMeters = Number.isFinite(item.distanceMeters)
+    ? item.distanceMeters
+    : Number.isFinite(parentPoi?.distanceMeters)
+    ? parentPoi.distanceMeters
+    : null;
+
+  if (!Number.isFinite(computedMeters) && userCoord) {
+    const d = distanceMeters(userCoord, { latitude: validLat, longitude: validLng });
+    if (Number.isFinite(d)) {
+      computedMeters = d;
+    }
+  }
+
+  const distanceLabel = Number.isFinite(computedMeters)
+    ? formatDistanceText(computedMeters)
+    : typeof item.distance === 'string' && item.distance !== 'Jarak belum tersedia'
+    ? item.distance
+    : typeof parentPoi?.distance === 'string' &&
+      parentPoi.distance !== 'Jarak belum tersedia'
+    ? parentPoi.distance
+    : 'Jarak belum tersedia';
 
   return {
     ...localMeta,
+    ...parentPoi,
     ...item,
-    latitude: lat,
-    longitude: lng,
+    latitude: validLat,
+    longitude: validLng,
     coordinate: {
-      latitude: Number.isFinite(lat) ? lat : BRAGA_REGION.latitude,
-      longitude: Number.isFinite(lng) ? lng : BRAGA_REGION.longitude,
+      latitude: validLat,
+      longitude: validLng,
     },
     rating: item.rating == null ? 'Belum tersedia' : String(item.rating),
-    distance: Number.isFinite(item.distanceMeters) ? `${Math.round(item.distanceMeters)} m` : 'Jarak belum tersedia',
+    distanceMeters: computedMeters,
+    distance: distanceLabel,
   };
 }
 
@@ -116,6 +161,14 @@ export default function ExploreScreen({
   onAddToItinerary,
   onSimulateGeofence,
 }) {
+  const insets = useSafeAreaInsets();
+  const topInset =
+    insets.top > 0
+      ? insets.top
+      : Platform.OS === 'android'
+      ? StatusBar.currentHeight || 28
+      : 44;
+
   const mapRef = useRef(null);
   const [activeSegment, setActiveSegment] = useState('nearby'); // 'nearby' | 'recommendation'
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -198,7 +251,7 @@ export default function ExploreScreen({
   const [selectedEnv, setSelectedEnv] = useState('Semua');
   const [selectedRating, setSelectedRating] = useState('0');
   const [openDropdown, setOpenDropdown] = useState(null);
-  const [sheetPois, setSheetPois] = useState([]);
+  const [rawSheetPois, setRawSheetPois] = useState([]);
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/categories`)
@@ -228,10 +281,8 @@ export default function ExploreScreen({
     fetch(`${API_BASE_URL}/api/pois/search?${params.toString()}`)
       .then((res) => res.json())
       .then((json) => {
-        if (Array.isArray(json.data) && json.data.length > 0) {
-          setSheetPois(json.data.map(normalizePoiItem));
-        } else if (Array.isArray(json.data)) {
-          setSheetPois([]);
+        if (Array.isArray(json.data)) {
+          setRawSheetPois(json.data);
         }
       })
       .catch(() => {});
@@ -266,26 +317,28 @@ export default function ExploreScreen({
     }).start();
   };
 
-  const panResponder = useMemo(() =>
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
-      onPanResponderMove: (_, gesture) => {
-        const nextHeight = currentHeight - gesture.dy;
-        if (nextHeight >= COLLAPSED_HEIGHT - 20 && nextHeight <= EXPANDED_HEIGHT + 20) {
-          sheetHeight.setValue(nextHeight);
-        }
-      },
-      onPanResponderRelease: (_, gesture) => {
-        if (gesture.dy < -40) {
-          animateSheet(true);
-        } else if (gesture.dy > 40) {
-          animateSheet(false);
-        } else {
-          animateSheet(currentHeight > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
-        }
-      },
-    })
-  , [currentHeight, sheetHeight]);
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
+        onPanResponderMove: (_, gesture) => {
+          const nextHeight = currentHeight - gesture.dy;
+          if (nextHeight >= COLLAPSED_HEIGHT - 20 && nextHeight <= EXPANDED_HEIGHT + 20) {
+            sheetHeight.setValue(nextHeight);
+          }
+        },
+        onPanResponderRelease: (_, gesture) => {
+          if (gesture.dy < -40) {
+            animateSheet(true);
+          } else if (gesture.dy > 40) {
+            animateSheet(false);
+          } else {
+            animateSheet(currentHeight > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
+          }
+        },
+      }),
+    [currentHeight, sheetHeight]
+  );
 
   const getDropdownConfig = () => {
     switch (openDropdown) {
@@ -337,7 +390,12 @@ export default function ExploreScreen({
       <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
         {label}
       </Text>
-      <View style={[styles.filterChevronCircle, isActive && styles.filterChevronCircleActive]}>
+      <View
+        style={[
+          styles.filterChevronCircle,
+          isActive && styles.filterChevronCircleActive,
+        ]}
+      >
         <Ionicons
           name="chevron-down"
           size={12}
@@ -355,15 +413,28 @@ export default function ExploreScreen({
     selectedEnv !== 'Semua' ||
     selectedRating !== '0';
 
-  const fallbackPois = (Array.isArray(pois) ? pois : []).map(
-    normalizePoiItem
-  );
+  const displayPois = useMemo(() => {
+    const existingList = Array.isArray(pois) ? pois : [];
+    const sourceList = hasActiveFilter
+      ? rawSheetPois
+      : rawSheetPois.length > 0
+      ? rawSheetPois
+      : existingList;
 
-  const displayPois = hasActiveFilter
-    ? sheetPois
-    : sheetPois.length > 0
-    ? sheetPois
-    : fallbackPois;
+    const normalized = sourceList.map((item) =>
+      normalizePoiItem(item, resolvedUserCoord, existingList)
+    );
+
+    if (activeSegment === 'nearby') {
+      return [...normalized].sort((a, b) => {
+        const da = Number.isFinite(a.distanceMeters) ? a.distanceMeters : Infinity;
+        const db = Number.isFinite(b.distanceMeters) ? b.distanceMeters : Infinity;
+        return da - db;
+      });
+    }
+
+    return normalized;
+  }, [activeSegment, hasActiveFilter, pois, rawSheetPois, resolvedUserCoord]);
 
   return (
     <View style={styles.root}>
@@ -423,14 +494,18 @@ export default function ExploreScreen({
               <Marker
                 key={String(poi.id)}
                 coordinate={{ latitude: lat, longitude: lng }}
+                anchor={{ x: 0.5, y: 0.32 }}
+                centerOffset={{ x: 0, y: 12 }}
                 onPress={() => onOpenDetail?.(poi)}
               >
-                <View style={styles.customMarkerRow}>
+                <View style={styles.customMarkerCol}>
                   <View style={styles.teardropPin}>
                     <View style={styles.pinInnerHole} />
                   </View>
                   <View style={styles.markerLabelBadge}>
-                    <Text style={styles.mapLabelText}>{poi.name}</Text>
+                    <Text style={styles.mapLabelText} numberOfLines={1}>
+                      {poi.name}
+                    </Text>
                   </View>
                 </View>
               </Marker>
@@ -439,7 +514,10 @@ export default function ExploreScreen({
         </MapView>
 
         {/* Top Floating Bar: Bubble Info Luar Zona + Tombol Search & Bookmark */}
-        <SafeAreaView style={styles.topOverlay} pointerEvents="box-none">
+        <View
+          style={[styles.topOverlay, { paddingTop: topInset + 8 }]}
+          pointerEvents="box-none"
+        >
           <View style={styles.topActionRow} pointerEvents="box-none">
             {isOutsideBragaZone && (
               <TouchableOpacity
@@ -477,7 +555,7 @@ export default function ExploreScreen({
               </TouchableOpacity>
             </View>
           </View>
-        </SafeAreaView>
+        </View>
       </View>
 
       {/* Draggable Bottom Sheet (Nearby You & Contextual Recommendation) */}
@@ -622,7 +700,7 @@ export default function ExploreScreen({
                 <View style={{ paddingHorizontal: 20 }}>
                   <PoiDetailFooter
                     name={poi.name}
-                    distance={poi.distance || `${poi.triggerRadiusMeters || 10}m`}
+                    distance={poi.distance}
                     rating={poi.rating}
                     isSaved={isPoiSaved}
                     onCheckDetail={() => onOpenDetail?.(poi)}
@@ -723,7 +801,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? 44 : 12,
     gap: 10,
   },
   outsideZoneBubble: {
@@ -765,36 +842,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     elevation: 4,
   },
-  customMarkerRow: {
-    flexDirection: 'row',
+  customMarkerCol: {
     alignItems: 'center',
-    gap: 6,
   },
   teardropPin: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#8B65D4',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.white,
     elevation: 3,
   },
   pinInnerHole: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: COLORS.lavenderTint,
   },
   markerLabelBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    marginTop: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: 8,
+    maxWidth: 140,
+    elevation: 2,
   },
   mapLabelText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: COLORS.primaryPurple,
+    textAlign: 'center',
   },
   recenterBtn: {
     position: 'absolute',
