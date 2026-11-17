@@ -1,6 +1,6 @@
 const { validCoordinate } = require('../location/distance');
 /** @typedef {{id:string, name:string, category:string, latitude:number, longitude:number,
- * triggerRadiusMeters: number, shortDescription: string, imageUrl?:string, images?:object[]}} Poi */
+ * triggerRadiusMeters: number, cooldownSeconds?:number, shortDescription: string, imageUrl?:string, images?:object[]}} Poi */
 /** PB03 adapter: invalid records and ALL occurrences of duplicate IDs are excluded.
  * @param {unknown} input @returns {Poi[]}
  */

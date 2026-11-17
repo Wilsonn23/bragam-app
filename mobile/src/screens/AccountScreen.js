@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -30,48 +30,44 @@ export default function AccountScreen({ user, onLogout }) {
 
   const displayName = user?.name?.trim() || 'Pengguna BRAGAm';
   const displayEmail = user?.email || 'Email belum tersedia';
-  const [sheetHeight] = useState(() => new Animated.Value(MAX_SHEET_HEIGHT));
-  const startHeight = useRef(MAX_SHEET_HEIGHT);
-  const currentHeight = useRef(MAX_SHEET_HEIGHT);
-
-  const animateSheet = (height) => {
-    currentHeight.current = height;
-    Animated.spring(sheetHeight, {
-      toValue: height,
-      useNativeDriver: false,
-      bounciness: 3,
-    }).start();
-  };
-
-  // PanResponder callbacks must retain mutable gesture state in refs.
-  // eslint-disable-next-line react-hooks/refs
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
-        onPanResponderGrant: () => {
-          startHeight.current = currentHeight.current;
-        },
-        onPanResponderMove: (_, gesture) => {
-          const nextHeight = Math.max(
-            COLLAPSED_HEIGHT,
-            Math.min(MAX_SHEET_HEIGHT, startHeight.current - gesture.dy)
-          );
-          currentHeight.current = nextHeight;
-          sheetHeight.setValue(nextHeight);
-        },
-        onPanResponderRelease: (_, gesture) => {
-          animateSheet(
-            gesture.dy > 40 ||
-              currentHeight.current < (COLLAPSED_HEIGHT + MAX_SHEET_HEIGHT) / 2
-              ? COLLAPSED_HEIGHT
-              : MAX_SHEET_HEIGHT
-          );
-        },
-      }),
-    [animateSheet, sheetHeight]
-  );
+  // Keep the animated value and gesture handlers together for this mounted screen.
+  const [{ sheetHeight, panResponder }] = useState(() => {
+    const sheetHeight = new Animated.Value(MAX_SHEET_HEIGHT);
+    let startHeight = MAX_SHEET_HEIGHT;
+    let currentHeight = MAX_SHEET_HEIGHT;
+    const animateSheet = (height) => {
+      currentHeight = height;
+      Animated.spring(sheetHeight, {
+        toValue: height,
+        useNativeDriver: false,
+        bounciness: 3,
+      }).start();
+    };
+    const panResponder = PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
+      onPanResponderGrant: () => {
+        startHeight = currentHeight;
+      },
+      onPanResponderMove: (_, gesture) => {
+        const nextHeight = Math.max(
+          COLLAPSED_HEIGHT,
+          Math.min(MAX_SHEET_HEIGHT, startHeight - gesture.dy)
+        );
+        currentHeight = nextHeight;
+        sheetHeight.setValue(nextHeight);
+      },
+      onPanResponderRelease: (_, gesture) => {
+        animateSheet(
+          gesture.dy > 40 ||
+            currentHeight < (COLLAPSED_HEIGHT + MAX_SHEET_HEIGHT) / 2
+            ? COLLAPSED_HEIGHT
+            : MAX_SHEET_HEIGHT
+        );
+      },
+    });
+    return { sheetHeight, panResponder };
+  });
 
   return (
     <View style={styles.root}>

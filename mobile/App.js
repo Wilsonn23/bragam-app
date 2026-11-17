@@ -268,8 +268,6 @@ function MainApp() {
   return (
     <View onLayout={handleContainerLayout} style={styles.container}>
       <StatusBar
-        translucent
-        backgroundColor="transparent"
         barStyle={isLightStatusBar ? 'light-content' : 'dark-content'}
       />
 
