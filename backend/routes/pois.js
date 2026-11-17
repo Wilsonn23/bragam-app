@@ -1,4 +1,6 @@
 const express = require('express');
+const { loadLocalTestPoi, appendLocalTestPoi, distanceMeters } = require('../localTestPoi');
+const { toPoiResponse: sharedPoiResponse } = require('../poiResponse');
 
 const router = express.Router();
 
@@ -11,7 +13,7 @@ router.get('/pois', async (req, res, next) => {
       FROM pois
       ORDER BY id
     `);
-    const rows = await withImages(req.db, result.rows);
+    const rows = await withImages(req.db, appendLocalTestPoi(result.rows, await loadLocalTestPoi(req.db)));
     console.info(`[DB] /api/pois loaded ${rows.length} POI(s)`);
     res.json(rows.map(toPoiResponse));
   } catch (error) {
@@ -27,7 +29,10 @@ router.get('/categories', async (req, res, next) => {
       WHERE category IS NOT NULL AND TRIM(category) <> ''
       ORDER BY category ASC
     `);
-    const categories = ['Semua', ...rows.map((row) => row.category)];
+    const testPoi = await loadLocalTestPoi(req.db);
+    const names = rows.map((row) => row.category);
+    if (testPoi && !names.includes(testPoi.category)) names.push(testPoi.category);
+    const categories = ['Semua', ...names.sort()];
     console.info(`[DB] /api/categories loaded ${rows.length} category row(s)`);
     res.json({ categories });
   } catch (error) {
@@ -63,7 +68,12 @@ router.get('/pois/search', async (req, res, next) => {
       `SELECT * FROM pois ${whereClause} ORDER BY id ASC`,
       values
     );
-    const filtered = result.rows.filter((row) => {
+    const filtered = appendLocalTestPoi(result.rows, await loadLocalTestPoi(req.db)).filter((row) => {
+      if (row.id === 'TEST-LOCAL') {
+        const text = `${row.name} ${row.category} ${row.description}`.toLowerCase();
+        if (q && !text.includes(q.toLowerCase())) return false;
+        if (category && category !== 'Semua' && row.category !== category) return false;
+      }
       if (timeCategory !== 'semua' && row.time_category != null &&
           !String(row.time_category).toLowerCase().includes(timeCategory)) {
         return false;
@@ -134,7 +144,16 @@ router.get('/pois/nearby', async (req, res, next) => {
       ORDER BY distance_meters ASC
       LIMIT 1
     `, [latitude, longitude, maxRadius]);
-    const rows = await withImages(req.db, result.rows);
+    const nearby = [...result.rows];
+    const testPoi = await loadLocalTestPoi(req.db);
+    if (testPoi && !nearby.some(row => row.id === testPoi.id)) {
+      const distance = distanceMeters({ latitude, longitude }, testPoi);
+      if (distance <= Math.min(testPoi.radius_meters, maxRadius)) {
+        nearby.push({ ...testPoi, distance_meters: distance });
+      }
+    }
+    nearby.sort((a, b) => Number(a.distance_meters) - Number(b.distance_meters));
+    const rows = await withImages(req.db, nearby.slice(0, 1));
     console.info(
       `[DB] /api/pois/nearby lat=${latitude} lng=${longitude} ` +
       `maxRadius=${maxRadius} found=${rows.length}`
@@ -147,18 +166,22 @@ router.get('/pois/nearby', async (req, res, next) => {
 
 router.get('/pois/:id/images', async (req, res, next) => {
   try {
+    const testPoi = await loadLocalTestPoi(req.db);
+    const isLocal = testPoi?.id === req.params.id;
+    if (isLocal && !testPoi.source_poi_id) return res.json([]);
+    const imagePoiId = isLocal ? testPoi.source_poi_id : req.params.id;
     const result = await req.db.query(`
       SELECT id, poi_id, image_url, alt_text, sort_order
       FROM poi_images
       WHERE poi_id = $1
       ORDER BY sort_order ASC, id ASC
-    `, [req.params.id]);
+    `, [imagePoiId]);
 
     res.json(result.rows
       .filter((image) => /^https?:\/\//i.test(image.image_url))
       .map((image) => ({
         id: String(image.id),
-        poiId: image.poi_id,
+        poiId: req.params.id,
         imageUrl: image.image_url,
         altText: image.alt_text || '',
         sortOrder: image.sort_order,
@@ -170,6 +193,11 @@ router.get('/pois/:id/images', async (req, res, next) => {
 
 router.get('/pois/:id', async (req, res, next) => {
   try {
+    const testPoi = await loadLocalTestPoi(req.db);
+    if (testPoi?.id === req.params.id) {
+      const [withGallery] = await withImages(req.db, [testPoi]);
+      return res.json(toPoiResponse(withGallery));
+    }
     const result = await req.db.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
              description, history, image_url, notification_title, audio_guide_url
@@ -196,6 +224,7 @@ function toPoiResponse(row) {
   const imageUrl = images[0]?.imageUrl || legacyImageUrl;
 
   return {
+    ...sharedPoiResponse(row),
     id: row.id,
     name: row.name,
     category: row.category,
@@ -212,13 +241,14 @@ function toPoiResponse(row) {
     notificationBody: row.notification_body === undefined ? null : row.notification_body,
     audioGuideUrl: row.audio_guide_url || undefined,
     distanceMeters: row.distance_meters === undefined ? undefined : Number(row.distance_meters),
+    ...(row.is_local_test ? { isLocalTest: true, sourcePoiId: row.source_poi_id } : {}),
   };
 }
 
 async function withImages(db, rows) {
   if (!rows.length) return rows;
 
-  const poiIds = rows.map((row) => row.id);
+  const poiIds = [...new Set(rows.map((row) => row.source_poi_id || row.id))];
   const { rows: imageRows } = await db.query(`
     SELECT id, poi_id, image_url, alt_text, sort_order
     FROM poi_images
@@ -241,7 +271,7 @@ async function withImages(db, rows) {
 
   return rows.map((row) => ({
     ...row,
-    images: imagesByPoi.get(row.id) || [],
+    images: imagesByPoi.get(row.source_poi_id || row.id) || [],
   }));
 }
 
