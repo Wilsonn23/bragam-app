@@ -1,25 +1,77 @@
-import React from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
+  Animated,
+  Dimensions,
+  PanResponder,
 } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 
-export default function AccountScreen() {
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const COLLAPSED_HEIGHT = 220;
+const MAX_SHEET_HEIGHT = Math.min(SCREEN_HEIGHT * 0.4, 300);
+
+export default function AccountScreen({ user, onLogout }) {
+  const displayName = user?.name?.trim() || 'Pengguna BRAGAm';
+  const displayEmail = user?.email || 'Email belum tersedia';
+  const [sheetHeight] = useState(() => new Animated.Value(MAX_SHEET_HEIGHT));
+  const startHeight = useRef(MAX_SHEET_HEIGHT);
+  const currentHeight = useRef(MAX_SHEET_HEIGHT);
+  const animateSheet = (height) => {
+    currentHeight.current = height;
+    Animated.spring(sheetHeight, {
+      toValue: height,
+      useNativeDriver: false,
+      bounciness: 3,
+    }).start();
+  };
+  // PanResponder callbacks must retain mutable gesture state in refs.
+  // eslint-disable-next-line react-hooks/refs
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
+    onPanResponderGrant: () => {
+      startHeight.current = currentHeight.current;
+    },
+    onPanResponderMove: (_, gesture) => {
+      const nextHeight = Math.max(
+        COLLAPSED_HEIGHT,
+        Math.min(MAX_SHEET_HEIGHT, startHeight.current - gesture.dy)
+      );
+      currentHeight.current = nextHeight;
+      sheetHeight.setValue(nextHeight);
+    },
+    onPanResponderRelease: (_, gesture) => {
+      animateSheet(gesture.dy > 40 || currentHeight.current < (COLLAPSED_HEIGHT + MAX_SHEET_HEIGHT) / 2
+        ? COLLAPSED_HEIGHT
+        : MAX_SHEET_HEIGHT);
+    },
+  }), [animateSheet, sheetHeight]);
   return (
     <View style={styles.root}>
       {/* Upper Purple Profile Section */}
       <SafeAreaView style={styles.headerSection}>
         <View style={styles.topRow}>
           <Text style={styles.headerTitle}>Pengaturan Akun</Text>
-          <TouchableOpacity activeOpacity={0.8} style={styles.notifCircleBtn}>
-            <Ionicons name="notifications" size={20} color={COLORS.darkPurple} />
-          </TouchableOpacity>
+          <View style={styles.topActions}>
+            <TouchableOpacity activeOpacity={0.8} style={styles.notifCircleBtn}>
+              <Ionicons name="notifications" size={20} color={COLORS.darkPurple} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={onLogout}
+              style={styles.logoutCircleBtn}
+              accessibilityLabel="Keluar akun"
+            >
+              <MaterialCommunityIcons name="exit-to-app" size={21} color={COLORS.darkPurple} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Circular Avatar Placeholder */}
@@ -44,7 +96,8 @@ export default function AccountScreen() {
           </Svg>
         </View>
 
-        <Text style={styles.userName}>Favian</Text>
+        <Text style={styles.userName}>{displayName}</Text>
+        <Text style={styles.userEmail}>{displayEmail}</Text>
         <Text style={styles.visitCounterText}>
           6 Destinasi Braga Telah Kamu Kunjungi!
         </Text>
@@ -61,8 +114,10 @@ export default function AccountScreen() {
       </SafeAreaView>
 
       {/* Bottom Sheet Settings Menu */}
-      <View style={styles.bottomSheet}>
-        <View style={styles.dragHandle} />
+      <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
+        <View {...panResponder.panHandlers} style={styles.dragHandleHitArea}>
+          <View style={styles.dragHandle} />
+        </View>
 
         {/* Menu Item 1: Ganti Password */}
         <TouchableOpacity activeOpacity={0.75} style={styles.menuRow}>
@@ -84,19 +139,7 @@ export default function AccountScreen() {
           <Ionicons name="chevron-forward" size={20} color={COLORS.darkPurple} />
         </TouchableOpacity>
 
-        {/* Spacer + Keluar Akun Button */}
-        <View style={styles.logoutWrapper}>
-          <TouchableOpacity activeOpacity={0.85} style={styles.logoutBtn}>
-            <Text style={styles.logoutText}>Keluar Akun</Text>
-            <MaterialCommunityIcons
-              name="exit-to-app"
-              size={22}
-              color={COLORS.darkPurple}
-              style={{ marginLeft: 10 }}
-            />
-          </TouchableOpacity>
-        </View>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -133,6 +176,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  logoutCircleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   avatarContainer: {
     width: 96,
     height: 96,
@@ -148,6 +204,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.white,
     marginBottom: 4,
+  },
+  userEmail: {
+    fontSize: 13,
+    color: COLORS.white,
+    opacity: 0.9,
+    marginBottom: 8,
   },
   visitCounterText: {
     fontSize: 14,
@@ -169,19 +231,26 @@ const styles = StyleSheet.create({
     color: COLORS.primaryPurple,
   },
   bottomSheet: {
-    flex: 1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: COLORS.softLilacBg,
     borderTopLeftRadius: RADIUS.sheet,
     borderTopRightRadius: RADIUS.sheet,
     paddingTop: 10,
+    overflow: 'hidden',
+  },
+  dragHandleHitArea: {
+    alignItems: 'center',
+    paddingVertical: 8,
   },
   dragHandle: {
     width: 48,
     height: 4,
     borderRadius: 2,
     backgroundColor: COLORS.lavenderTint,
-    alignSelf: 'center',
-    marginBottom: 10,
+    marginBottom: 2,
   },
   menuRow: {
     flexDirection: 'row',
@@ -213,26 +282,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: COLORS.textPrimary,
-  },
-  logoutWrapper: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    paddingBottom: 24,
-  },
-  logoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    borderWidth: 2,
-    borderColor: COLORS.primaryPurple,
-    borderRadius: RADIUS.pill,
-    paddingVertical: 10,
-    paddingHorizontal: 26,
-  },
-  logoutText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.primaryPurple,
   },
 });
