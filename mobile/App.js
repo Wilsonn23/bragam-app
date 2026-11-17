@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, StatusBar, Alert } from 'react-native';
-import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
+import { View, StyleSheet, StatusBar, Alert, Platform } from 'react-native';
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import BottomNavBar from './src/components/BottomNavBar';
 import PoiTriggerModal from './src/components/PoiTriggerModal';
 import HomeScreen from './src/screens/HomeScreen';
@@ -18,6 +21,7 @@ import { useAppActive, useForegroundLocation } from './src/hooks/useForegroundLo
 import { usePoiTriggers } from './src/hooks/usePoiTriggers';
 
 function MainApp() {
+  const insets = useSafeAreaInsets();
   const [currentUser, setCurrentUser] = useState(null);
   const { pois, loading, error } = usePois();
   const active = useAppActive();
@@ -40,6 +44,10 @@ function MainApp() {
   const [fullHeight, setFullHeight] = useState(0);
   const [currentHeight, setCurrentHeight] = useState(0);
   const [navHeight, setNavHeight] = useState(0);
+
+  // Jarak aman bawah agar BottomNavBar tidak tertutup tombol navigasi sistem Android
+  const systemBottomInset =
+    insets.bottom > 0 ? insets.bottom : Platform.OS === 'android' ? 24 : 0;
 
   const isPoiBookmarked = (targetPoi) => {
     if (!targetPoi) return false;
@@ -103,13 +111,17 @@ function MainApp() {
     fullHeight > 0 && currentHeight > 0 ? Math.max(0, fullHeight - currentHeight) : 0;
 
   const handleOpenDetail = (poi) => {
-    const byId = pois.find(item => item.id === poi?.id);
-    const byName = pois.filter(item => item.name.toLowerCase() === poi?.name?.toLowerCase());
+    const byId = pois.find((item) => item.id === poi?.id);
+    const byName = pois.filter(
+      (item) => item.name.toLowerCase() === poi?.name?.toLowerCase()
+    );
     const selected = byId || (byName.length === 1 ? byName[0] : null);
     if (!selected) {
       Alert.alert(
         'Destinasi belum tersedia',
-        loading ? 'Data destinasi sedang dimuat.' : error || 'Data detail destinasi tidak ditemukan.'
+        loading
+          ? 'Data destinasi sedang dimuat.'
+          : error || 'Data detail destinasi tidak ditemukan.'
       );
       return;
     }
@@ -189,8 +201,10 @@ function MainApp() {
       case 'Home':
         return (
           <HomeScreen
+            pois={pois}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
+            onOpenBookmarks={handleOpenBookmarks}
             onUseTrip={handleUseTrip}
           />
         );
@@ -216,20 +230,32 @@ function MainApp() {
       case 'Trip':
         return <TripScreen onUseTrip={handleUseTrip} />;
       case 'Account':
-        return <AccountScreen user={currentUser} onLogout={() => setCurrentUser(null)} />;
+        return (
+          <AccountScreen
+            user={currentUser}
+            onLogout={() => setCurrentUser(null)}
+          />
+        );
       default:
         return (
           <HomeScreen
+            pois={pois}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
+            onOpenBookmarks={handleOpenBookmarks}
             onUseTrip={handleUseTrip}
           />
         );
     }
   };
 
-  const visiblePoi = event ? { ...event.poi, distanceMeters: event.distanceMeters } : geofencePoi;
-  const closePoi = () => { if (event) dismiss(); else setGeofencePoi(null); };
+  const visiblePoi = event
+    ? { ...event.poi, distanceMeters: event.distanceMeters }
+    : geofencePoi;
+  const closePoi = () => {
+    if (event) dismiss();
+    else setGeofencePoi(null);
+  };
 
   const showBottomNav = subScreen !== 'PoiDetail';
   const isLightStatusBar =
@@ -242,15 +268,13 @@ function MainApp() {
   return (
     <View onLayout={handleContainerLayout} style={styles.container}>
       <StatusBar
+        translucent
+        backgroundColor="transparent"
         barStyle={isLightStatusBar ? 'light-content' : 'dark-content'}
       />
 
-      <View
-        style={[
-          styles.screenWrapper,
-          showBottomNav && navHeight > 0 ? { paddingBottom: navHeight } : null,
-        ]}
-      >
+      {/* Biarkan screenWrapper mengisi layar penuh tanpa terpotong paddingBottom putih */}
+      <View style={styles.screenWrapper}>
         {renderContent()}
       </View>
 
@@ -260,7 +284,10 @@ function MainApp() {
             const h = event.nativeEvent.layout.height;
             if (h > 0 && h !== navHeight) setNavHeight(h);
           }}
-          style={[styles.fixedBottomNav, { bottom: -windowShrink }]}
+          style={[
+            styles.fixedBottomNav,
+            { bottom: -windowShrink },
+          ]}
         >
           <BottomNavBar activeTab={activeTab} onSelectTab={handleSelectTab} />
         </View>
@@ -288,7 +315,7 @@ function MainApp() {
 
 export default function App() {
   return (
-    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+    <SafeAreaProvider>
       <MainApp />
     </SafeAreaProvider>
   );
@@ -307,5 +334,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    backgroundColor: COLORS.darkPurple,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
 });
