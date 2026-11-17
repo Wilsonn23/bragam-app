@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { fetchPois } from './src/poi/api';
 import { BRAGA_POIS } from './src/constants/bragaMapData';
-import { View, StyleSheet, StatusBar, Alert } from 'react-native';
+import { View, StyleSheet, StatusBar, Modal, Text, Pressable, ActivityIndicator } from 'react-native';
+import { useFonts } from 'expo-font';
+import { createRecommendationStore } from './src/recommendations/store';
+import { DEFAULT_FILTERS } from './src/recommendations/model';
+import { loadRecommendations } from './src/recommendations/service';
 import BottomNavBar from './src/components/BottomNavBar';
 import PoiTriggerModal from './src/components/PoiTriggerModal';
 import HomeScreen from './src/screens/HomeScreen';
@@ -15,7 +19,12 @@ import BookmarkScreen from './src/screens/BookmarkScreen';
 import { COLORS } from './src/components/theme';
 
 export default function App() {
+  const [fontsReady, fontError] = useFonts({ PB12Jakarta: require('./assets/fonts/PlusJakartaSans.ttf') });
   const [activeTab, setActiveTab] = useState('Home');
+  const [recommendationStore] = useState(() => createRecommendationStore(loadRecommendations));
+  useEffect(() => () => recommendationStore.cancel(), [recommendationStore]);
+  const [exploreView, setExploreView] = useState({ activeSegment: 'nearby', filters: { ...DEFAULT_FILTERS } });
+  const [actionNotice, setActionNotice] = useState(null);
 
   // Sub-screens state: null | 'PoiDetail' | 'Navigation' | 'TripSummary' | 'Bookmark'
   const [subScreen, setSubScreen] = useState(null);
@@ -95,10 +104,7 @@ export default function App() {
   };
 
   const handleAddToItinerary = (targetPoi) => {
-    Alert.alert(
-      'Berhasil Ditambahkan',
-      `${targetPoi.name} telah ditambahkan ke Itinerary perjalananmu.`
-    );
+    setActionNotice(`${targetPoi.name} belum ditambahkan. Fitur menambahkan destinasi ke itinerary belum tersedia.`);
   };
 
   const handleContainerLayout = (event) => {
@@ -198,6 +204,9 @@ export default function App() {
       case 'Explore':
         return (
           <ExploreScreen
+            recommendationStore={recommendationStore}
+            exploreView={exploreView}
+            onExploreViewChange={setExploreView}
             windowShrink={windowShrink}
             pois={pois}
             bookmarkedPois={bookmarkedPois}
@@ -228,6 +237,10 @@ export default function App() {
   const isLightStatusBar =
     subScreen === null && (activeTab === 'Home' || activeTab === 'Account');
 
+  if (!fontsReady && !fontError) return <View style={styles.fontLoading}>
+    <ActivityIndicator accessibilityLabel="Memuat tampilan" color={COLORS.primaryPurple} />
+  </View>;
+
   return (
     <View onLayout={handleContainerLayout} style={styles.container}>
       <StatusBar
@@ -257,9 +270,22 @@ export default function App() {
       )}
 
       {/* Geofence Notification Pop-up */}
+      <Modal visible={!!actionNotice} transparent animationType="fade" onRequestClose={() => setActionNotice(null)}>
+        <View style={styles.noticeBackdrop}>
+          <View style={styles.noticeCard} accessibilityViewIsModal>
+            <Text accessibilityRole="header" style={styles.noticeTitle}>Itinerary belum tersedia</Text>
+            <Text style={styles.noticeText}>{actionNotice}</Text>
+            <Pressable accessibilityRole="button" onPress={() => setActionNotice(null)} style={styles.noticeButton}>
+              <Text style={styles.noticeButtonText}>Tutup</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
       <PoiTriggerModal
         visible={Boolean(geofencePoi)}
         poi={geofencePoi}
+        onSave={handleToggleSavePoi}
+        onAddToItinerary={handleAddToItinerary}
         onClose={() => setGeofencePoi(null)}
         onCheckNow={(poi) => {
           setGeofencePoi(null);
@@ -275,6 +301,13 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  fontLoading: { flex: 1, backgroundColor: COLORS.softLilacBg, justifyContent: 'center' },
+  noticeBackdrop: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(20,10,40,0.45)' },
+  noticeCard: { padding: 24, borderRadius: 22, backgroundColor: COLORS.softLilacBg, gap: 16 },
+  noticeTitle: { color: COLORS.textPrimary, fontSize: 18, fontWeight: '700' },
+  noticeText: { color: COLORS.textPrimary, fontSize: 16, lineHeight: 24 },
+  noticeButton: { backgroundColor: COLORS.darkPurple, borderRadius: 999, minHeight: 48, justifyContent: 'center', padding: 12 },
+  noticeButtonText: { color: COLORS.white, textAlign: 'center', fontWeight: '600' },
   container: {
     flex: 1,
     backgroundColor: COLORS.white,

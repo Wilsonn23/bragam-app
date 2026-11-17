@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Dimensions,
   Platform,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import MapView, {
   Marker,
@@ -25,6 +26,8 @@ import { PoiDetailFooter } from '../components/PoiCardComponents';
 import PoiImageGallery from '../components/PoiImageGallery';
 import SearchPoiOverlay from '../components/SearchPoiOverlay';
 import { API_BASE_URL } from '../config/api';
+import RecommendationPanel, { RecommendationSearch } from '../components/RecommendationPanel';
+import { locationForRecommendations } from '../recommendations/model';
 import {
   BRAGA_REGION,
   BRAGA_POIS,
@@ -104,6 +107,9 @@ function normalizePoiItem(item) {
 }
 
 export default function ExploreScreen({
+  recommendationStore,
+  exploreView,
+  onExploreViewChange,
   windowShrink = 0,
   pois = BRAGA_POIS,
   bookmarkedPois = [],
@@ -115,15 +121,20 @@ export default function ExploreScreen({
   onSimulateGeofence,
 }) {
   const mapRef = useRef(null);
-  const [activeSegment, setActiveSegment] = useState('nearby'); // 'nearby' | 'recommendation'
+  const activeSegment = exploreView.activeSegment;
+  const setActiveSegment = (value) => onExploreViewChange((view) => ({ ...view, activeSegment: value }));
+  const { height: windowHeight } = useWindowDimensions();
+  const [containerHeight, setContainerHeight] = useState(windowHeight);
+  const expandedHeight = activeSegment === 'recommendation'
+    ? Math.max(200, Math.min(windowHeight * 0.82, containerHeight - 115)) : EXPANDED_HEIGHT;
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(activeSegment === 'recommendation');
 
   // State koordinat GPS dari MapView / expo-location sebagai cadangan cepat
   const [mapUserCoord, setMapUserCoord] = useState(null);
 
   // Baca GPS perangkat melalui hook foreground
-  const isAppActive = typeof useAppActive === 'function' ? useAppActive() : true;
+  const isAppActive = useAppActive();
   const locationState = useForegroundLocation(isAppActive);
   const hookCoords =
     locationState?.sample ||
@@ -235,7 +246,7 @@ export default function ExploreScreen({
       .catch(() => {});
   }, [selectedCategory, selectedTime, selectedEnv, selectedRating]);
 
-  const sheetHeight = useRef(new Animated.Value(COLLAPSED_HEIGHT)).current;
+  const [sheetHeight] = useState(() => new Animated.Value(activeSegment === 'recommendation' ? expandedHeight : COLLAPSED_HEIGHT));
   const currentHeightRef = useRef(COLLAPSED_HEIGHT);
 
   const handleRecenterBraga = () => {
@@ -253,8 +264,8 @@ export default function ExploreScreen({
     }
   };
 
-  const animateSheet = (toExpanded) => {
-    const target = toExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
+  const animateSheet = useCallback((toExpanded) => {
+    const target = toExpanded ? expandedHeight : COLLAPSED_HEIGHT;
     setIsExpanded(toExpanded);
     currentHeightRef.current = target;
     Animated.spring(sheetHeight, {
@@ -262,28 +273,43 @@ export default function ExploreScreen({
       useNativeDriver: false,
       bounciness: 4,
     }).start();
-  };
+  }, [expandedHeight, sheetHeight]);
 
-  const panResponder = useRef(
+  const sheetInteraction = useRef(null);
+  useEffect(() => {
+    sheetInteraction.current = { animateSheet, expandedHeight };
+  }, [animateSheet, expandedHeight]);
+
+  // Ref access is deferred to gesture callbacks, not performed during render.
+  // eslint-disable-next-line react-hooks/refs
+  const [panResponder] = useState(() =>
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
       onPanResponderMove: (_, gesture) => {
         const nextHeight = currentHeightRef.current - gesture.dy;
-        if (nextHeight >= COLLAPSED_HEIGHT - 20 && nextHeight <= EXPANDED_HEIGHT + 20) {
+        if (nextHeight >= Math.min(COLLAPSED_HEIGHT, sheetInteraction.current.expandedHeight) - 20 &&
+          nextHeight <= sheetInteraction.current.expandedHeight + 20) {
           sheetHeight.setValue(nextHeight);
         }
       },
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dy < -40) {
-          animateSheet(true);
+          sheetInteraction.current.animateSheet(true);
         } else if (gesture.dy > 40) {
-          animateSheet(false);
+          sheetInteraction.current.animateSheet(false);
         } else {
-          animateSheet(currentHeightRef.current > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
+          sheetInteraction.current.animateSheet(currentHeightRef.current >
+            (COLLAPSED_HEIGHT + sheetInteraction.current.expandedHeight) / 2);
         }
       },
     })
-  ).current;
+  );
+
+  useEffect(() => {
+    const target = isExpanded ? expandedHeight : Math.min(COLLAPSED_HEIGHT, expandedHeight);
+    currentHeightRef.current = target;
+    sheetHeight.setValue(target);
+  }, [activeSegment, expandedHeight, isExpanded, sheetHeight]);
 
   const getDropdownConfig = () => {
     switch (openDropdown) {
@@ -364,7 +390,7 @@ export default function ExploreScreen({
     : fallbackPois;
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} onLayout={(event) => setContainerHeight(event.nativeEvent.layout.height)}>
       {/* Google Maps / Apple Maps Canvas */}
       <View style={styles.mapCanvas}>
         <MapView
@@ -439,7 +465,10 @@ export default function ExploreScreen({
         {/* Top Floating Bar: Bubble Info Luar Zona + Tombol Search & Bookmark */}
         <SafeAreaView style={styles.topOverlay} pointerEvents="box-none">
           <View style={styles.topActionRow} pointerEvents="box-none">
-            {isOutsideBragaZone && (
+            {activeSegment === 'recommendation' && <RecommendationSearch query={exploreView.filters.query}
+              onChange={(query) => { recommendationStore.setScrollOffset(0);
+                onExploreViewChange((view) => ({ ...view, filters: { ...view.filters, query } })); }} />}
+            {isOutsideBragaZone && activeSegment !== 'recommendation' && (
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={handleRecenterBraga}
@@ -457,16 +486,18 @@ export default function ExploreScreen({
             )}
 
             <View style={styles.rightButtonsGroup}>
-              <TouchableOpacity
+              {activeSegment !== 'recommendation' && <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={() => setIsSearchOpen(true)}
                 style={styles.circleActionBtn}
               >
                 <Ionicons name="search" size={20} color={COLORS.darkPurple} />
-              </TouchableOpacity>
+              </TouchableOpacity>}
 
               <TouchableOpacity
                 activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Buka bookmark"
                 onPress={onOpenBookmarks}
                 onLongPress={onSimulateGeofence}
                 style={styles.circleActionBtn}
@@ -482,7 +513,7 @@ export default function ExploreScreen({
       <Animated.View
         style={[
           styles.bottomSheet,
-          { height: sheetHeight, bottom: -windowShrink },
+          { height: sheetHeight, bottom: activeSegment === 'recommendation' ? 0 : -windowShrink },
         ]}
       >
         {/* Floating Recenter Button above sheet */}
@@ -508,6 +539,7 @@ export default function ExploreScreen({
           <View style={styles.segmentContainer}>
             <TouchableOpacity
               activeOpacity={0.85}
+              accessibilityRole="tab" accessibilityState={{ selected: activeSegment === 'nearby' }}
               onPress={() => setActiveSegment('nearby')}
               style={[
                 styles.segmentBtn,
@@ -526,7 +558,8 @@ export default function ExploreScreen({
 
             <TouchableOpacity
               activeOpacity={0.85}
-              onPress={() => setActiveSegment('recommendation')}
+              accessibilityRole="tab" accessibilityState={{ selected: activeSegment === 'recommendation' }}
+              onPress={() => { setActiveSegment('recommendation'); animateSheet(true); }}
               style={[
                 styles.segmentBtn,
                 activeSegment === 'recommendation' && styles.segmentBtnActive,
@@ -544,7 +577,7 @@ export default function ExploreScreen({
           </View>
 
           {/* Filter Pills Row (tampil saat sheet digeser ke atas) */}
-          {isExpanded && (
+          {isExpanded && activeSegment === 'nearby' && (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -586,8 +619,14 @@ export default function ExploreScreen({
           )}
         </View>
 
-        {/* Scrollable POI Cards List */}
-        <ScrollView
+        {/* Recommendation has its own ordered service result and scroll owner. */}
+        {activeSegment === 'recommendation' ? <RecommendationPanel
+          store={recommendationStore} catalogue={pois} filters={exploreView.filters}
+          onFiltersChange={(filters) => onExploreViewChange((view) => ({ ...view, filters }))}
+          location={locationForRecommendations(locationState.sample)}
+          bookmarkedPois={bookmarkedPois} onOpenDetail={onOpenDetail}
+          onOpenDirections={onOpenDirections} onToggleSave={onToggleSave}
+          onAddToItinerary={onAddToItinerary} /> : <ScrollView
           style={{ flex: 1 }}
           nestedScrollEnabled={true}
           showsVerticalScrollIndicator={false}
@@ -632,7 +671,7 @@ export default function ExploreScreen({
               </View>
             );
           })}
-        </ScrollView>
+        </ScrollView>}
       </Animated.View>
 
       {/* Dropdown Picker Overlay untuk Filter Bottom Sheet */}

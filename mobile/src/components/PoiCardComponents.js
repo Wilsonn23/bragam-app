@@ -15,11 +15,14 @@ export function WireframeImageBox({ width = '100%', height = 160, style }) {
   );
 }
 
+/** @param {{name?:string, distance?:string, rating?:any, recommendation?:boolean, isSaved?:boolean,
+ * onCheckDetail?:()=>void, onDirections?:()=>void, onSave?:()=>void, onAddToItinerary?:()=>void}} props */
 export function PoiDetailFooter({
   name = 'Braga Citywalk',
   distance = '12km',
   rating = '5.0',
   isSaved = false,
+  recommendation = false,
   onCheckDetail,
   onDirections,
   onSave,
@@ -28,24 +31,28 @@ export function PoiDetailFooter({
   return (
     <View style={styles.footerWrapper}>
       {/* Info Row: Pin + Nama + Rating + Check Detail */}
-      <View style={styles.infoRow}>
+      <View style={[styles.infoRow, recommendation && styles.recommendationInfo]}>
         <View style={styles.distanceCol}>
           <View style={styles.pinBadge}>
             <Ionicons name="location" size={18} color={COLORS.darkPurple} />
           </View>
-          <Text style={styles.distanceText}>{distance}</Text>
+          <Text accessibilityLabel={distance} style={[styles.distanceText, recommendation && styles.jakarta]}>
+            {recommendation && distance === 'Jarak belum tersedia' ? '—' : distance}
+          </Text>
         </View>
 
-        <View style={styles.titleCol}>
-          <Text style={styles.poiTitle} numberOfLines={1}>
+        <View style={[styles.titleCol, recommendation && styles.recommendationTitle]}>
+          <Text style={[styles.poiTitle, recommendation && styles.jakarta]} numberOfLines={recommendation ? undefined : 1}>
             {name}
           </Text>
-          <View style={styles.ratingRow}>
-            <Text style={styles.ratingText}>{rating}</Text>
-            {[1, 2, 3, 4].map((star) => (
+          <View style={[styles.ratingRow, recommendation && styles.recommendationRating]}>
+            <Text style={[styles.ratingText, recommendation && styles.jakarta]}>{recommendation
+              ? rating ? `${rating.value.toFixed(1)} (${rating.count})` : 'Belum ada ulasan'
+              : rating}</Text>
+            {(recommendation ? rating ? [1, 2, 3, 4, 5] : [] : [1, 2, 3, 4]).map((star) => (
               <Ionicons
                 key={star}
-                name="star"
+                name={recommendation && star > rating.value ? star - rating.value < 1 ? 'star-half' : 'star-outline' : 'star'}
                 size={14}
                 color={COLORS.darkPurple}
                 style={{ marginLeft: 2 }}
@@ -56,10 +63,13 @@ export function PoiDetailFooter({
 
         <TouchableOpacity
           activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={`Check Detail ${name}`}
+          disabled={recommendation && !onCheckDetail}
           onPress={onCheckDetail}
-          style={styles.checkDetailBtn}
+          style={[styles.checkDetailBtn, recommendation && styles.recommendationAction]}
         >
-          <Text style={styles.checkDetailText}>Check Detail</Text>
+          <Text style={[styles.checkDetailText, recommendation && styles.jakarta]}>Check Detail</Text>
           <View style={styles.chevronCircle}>
             <Ionicons name="chevron-forward" size={13} color={COLORS.darkPurple} />
           </View>
@@ -67,13 +77,18 @@ export function PoiDetailFooter({
       </View>
 
       {/* Action Buttons Row */}
-      <View style={styles.actionRow}>
+      <View style={[styles.actionRow, recommendation && styles.recommendationActions]}>
         <TouchableOpacity
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Directions ${name}`}
+          disabled={recommendation && !onDirections}
+          accessibilityState={{ disabled: recommendation && !onDirections }}
           onPress={onDirections}
-          style={styles.outlinePillBtn}
+          style={[styles.outlinePillBtn, recommendation && styles.recommendationAction,
+            recommendation && !onDirections && styles.disabled]}
         >
-          <Text style={styles.outlinePillText}>Directions</Text>
+          <Text style={[styles.outlinePillText, recommendation && styles.jakarta]}>Directions</Text>
           <MaterialCommunityIcons
             name="directions"
             size={17}
@@ -84,15 +99,22 @@ export function PoiDetailFooter({
 
         <TouchableOpacity
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`${isSaved ? 'Saved' : 'Save'} ${name}`}
+          accessibilityState={{ selected: isSaved, disabled: recommendation && !onSave }}
+          disabled={recommendation && !onSave}
           onPress={onSave}
           style={[
             styles.outlinePillBtn,
+            recommendation && styles.recommendationAction,
+            recommendation && !onSave && styles.disabled,
             isSaved && styles.savedPillBtnActive,
           ]}
         >
           <Text
             style={[
               styles.outlinePillText,
+              recommendation && styles.jakarta,
               isSaved && styles.savedPillTextActive,
             ]}
           >
@@ -108,10 +130,15 @@ export function PoiDetailFooter({
 
         <TouchableOpacity
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Add to Itinerary ${name}`}
+          accessibilityState={{ disabled: recommendation && !onAddToItinerary }}
+          disabled={recommendation && !onAddToItinerary}
           onPress={onAddToItinerary}
-          style={styles.outlinePillBtn}
+          style={[styles.outlinePillBtn, recommendation && styles.recommendationAction,
+            recommendation && !onAddToItinerary && styles.disabled]}
         >
-          <Text style={styles.outlinePillText}>Add to Itinerary</Text>
+          <Text style={[styles.outlinePillText, recommendation && styles.jakarta]}>Add to Itinerary</Text>
           <Ionicons
             name="add-circle-outline"
             size={17}
@@ -125,6 +152,13 @@ export function PoiDetailFooter({
 }
 
 const styles = StyleSheet.create({
+  jakarta: { fontFamily: 'PB12Jakarta' },
+  recommendationInfo: { flexWrap: 'wrap', gap: 8 },
+  recommendationTitle: { minWidth: 110 },
+  recommendationRating: { flexWrap: 'wrap' },
+  recommendationActions: { flexWrap: 'wrap', justifyContent: 'flex-start' },
+  recommendationAction: { minHeight: 44, justifyContent: 'center' },
+  disabled: { opacity: 0.45 },
   imagePlaceholder: {
     backgroundColor: COLORS.lavenderTint,
     borderRadius: RADIUS.md,

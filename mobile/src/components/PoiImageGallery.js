@@ -40,7 +40,7 @@ export function PoiFirstImage({ poi, style }) {
   );
 }
 
-export default function PoiImageGallery({ poi, compact = false }) {
+export default function PoiImageGallery({ poi, compact = false, recommendation = false }) {
   const urls = useMemo(() => validImageUrls(poi), [poi]);
   const [failedUrls, setFailedUrls] = useState([]);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -48,7 +48,9 @@ export default function PoiImageGallery({ poi, compact = false }) {
 
   if (!availableUrls.length) {
     return compact
-      ? <View style={styles.compactPlaceholder} />
+      ? <View style={[styles.compactPlaceholder, recommendation && styles.recommendationImage]}>
+        {recommendation && <Text style={styles.emptyText}>Foto belum tersedia</Text>}
+      </View>
       : <View style={styles.empty}><Text style={styles.emptyText}>Foto belum tersedia</Text></View>;
   }
 
@@ -56,11 +58,11 @@ export default function PoiImageGallery({ poi, compact = false }) {
   if (compact) {
     return (
       <View style={styles.compactRow}>
-        {availableUrls.slice(0, 3).map((url) => (
+        {(recommendation ? availableUrls : availableUrls.slice(0, 3)).map((url) => (
           <Image
             key={url}
             source={{ uri: url }}
-            style={styles.compactImage}
+            style={[styles.compactImage, recommendation && styles.recommendationImage]}
             resizeMode="cover"
             accessibilityLabel={`Foto ${poi?.name || 'POI'}`}
             onError={() => markFailed(url)}
@@ -156,6 +158,9 @@ export default function PoiImageGallery({ poi, compact = false }) {
 }
 
 const styles = StyleSheet.create({
+  firstPlaceholder: { backgroundColor: COLORS.lavenderTint },
+  recommendationImage: { width: 117, height: 105, borderWidth: 2, borderColor: COLORS.primaryPurple,
+    justifyContent: 'center', alignItems: 'center', padding: 8 },
   gallery: { flexDirection: 'row', gap: 10, height: 232 },
   singleImage: {
     width: '100%',

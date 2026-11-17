@@ -15,6 +15,7 @@ import {
 import { COLORS, RADIUS } from '../components/theme';
 import PoiImageGallery from '../components/PoiImageGallery';
 import { fetchPoiImages } from '../poi/api';
+import { reviewedRating } from '../recommendations/model';
 
 const DETAIL_TABS = ['Overview', 'Menu', 'Review', 'About'];
 
@@ -56,6 +57,7 @@ export default function PoiDetailScreen({
   const placeName = poi?.name || 'Braga Citywalk';
   const distance = poi?.distance || '12km';
   const rating = poi?.rating || '5.0';
+  const recommendationRating = poi?.recommendationPoiId ? reviewedRating(poi) : null;
 
   const activePoi = {
     ...(poi || {
@@ -111,10 +113,11 @@ export default function PoiDetailScreen({
             <Text style={styles.poiTitle}>{placeName}</Text>
             <View style={styles.ratingRow}>
               <Text style={styles.ratingText}>{rating}</Text>
-              {[1, 2, 3, 4].map((star) => (
+              {(poi?.recommendationPoiId ? recommendationRating ? [1, 2, 3, 4, 5] : [] : [1, 2, 3, 4]).map((star) => (
                 <Ionicons
                   key={star}
-                  name="star"
+                  name={poi?.recommendationPoiId && star > recommendationRating.value
+                    ? star - recommendationRating.value < 1 ? 'star-half' : 'star-outline' : 'star'}
                   size={14}
                   color={COLORS.darkPurple}
                   style={{ marginLeft: 2 }}
