@@ -15,18 +15,10 @@ import {
   Keyboard,
   Platform,
 } from 'react-native';
-import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from './theme';
 import { WireframeImageBox } from './PoiCardComponents';
-
-const BACKEND_PORT = '5000';
-const debuggerHost =
-  Constants.expoConfig?.hostUri ||
-  Constants.manifest2?.extra?.expoGo?.debuggerHost ||
-  Constants.manifest?.debuggerHost;
-const localIp = debuggerHost ? debuggerHost.split(':')[0] : '10.46.161.81';
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || `http://${localIp}:${BACKEND_PORT}`;
+import { API_BASE_URL } from '../config/api';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 275;

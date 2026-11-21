@@ -33,9 +33,7 @@ import {
 } from '../constants/bragaMapData';
 import { useAppActive, useForegroundLocation } from '../hooks/useForegroundLocation';
 import { distanceMeters } from '../location/distance';
-
-// Sesuaikan IP komputer & PORT dengan yang ada di backend/.env
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000';
+import { API_BASE_URL } from '../config/api';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 275;

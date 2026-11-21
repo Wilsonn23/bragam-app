@@ -1,6 +1,5 @@
 const { adaptPois } = require('./adapter');
-
-const API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:5000').replace(/\/+$/, '');
+const { API_BASE_URL } = require('../config/api');
 
 /** @param {{signal?: AbortSignal, fetchImpl?: typeof fetch, baseUrl?: string}} [options] */
 async function fetchPois({ signal, fetchImpl = fetch, baseUrl = API_BASE_URL } = {}) {
