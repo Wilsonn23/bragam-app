@@ -201,6 +201,61 @@ Menghapus user.
 
 Response berhasil: `204 No Content`.
 
+## Ratings
+
+Rating disimpan di tabel terpisah `poi_ratings`. Satu user hanya memiliki satu rating
+per POI; operasi create otomatis melakukan *upsert* berdasarkan `(poi_id, user_id)`.
+
+### `GET /api/pois/:poiId/ratings`
+
+Mengambil ringkasan dan daftar review sebuah POI:
+
+* `averageRating`: rata-rata 1–5
+* `reviewCount`: total rating
+* `highRatingCount`: rating 4–5
+* `neutralRatingCount`: rating 3
+* `lowRatingCount`: rating 1–2
+* `breakdown`: jumlah masing-masing rating 1 sampai 5
+* `ratings`: daftar rating beserta nama user bila tersedia
+
+Trigger database memperbarui kolom `rating` dan `reviews_count` pada tabel `pois`
+setelah insert, update, atau delete rating.
+
+### `POST /api/pois/:poiId/ratings`
+
+Membuat atau memperbarui rating user.
+
+```bash
+curl -X POST http://localhost:5000/api/pois/P01/ratings \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"3f2504e0-4f89-41d3-9a0c-0305e82c3301","rating":5,"review":"Tempatnya bagus"}'
+```
+
+`rating` harus bilangan bulat 1–5. `review` opsional dan dibatasi 2000 karakter.
+
+### `GET /api/ratings/:id`
+
+Mengambil satu rating berdasarkan ID numerik.
+
+### `PATCH /api/ratings/:id`
+
+Memperbarui `rating` dan/atau `review`.
+
+```json
+{
+  "rating": 4,
+  "review": "Sekarang lebih nyaman"
+}
+```
+
+### `DELETE /api/ratings/:id`
+
+Menghapus satu rating. Response berhasil: `204 No Content`.
+
+### `GET /api/users/:id/ratings`
+
+Mengambil semua rating milik satu user berdasarkan UUID.
+
 ## Status error umum
 
 | Status | Arti |

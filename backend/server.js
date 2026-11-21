@@ -5,6 +5,7 @@ const swaggerUi = require('swagger-ui-express');
 const usersRouter = require('./routes/users');
 const authRouter = require('./routes/auth');
 const poisRouter = require('./routes/pois');
+const ratingsRouter = require('./routes/ratings');
 const openapiSpec = require('./openapi');
 require('dotenv').config();
 
@@ -29,6 +30,7 @@ function createApp(pool) {
   });
 
   app.use('/api', poisRouter);
+  app.use('/api', ratingsRouter);
   app.use('/api/users', usersRouter);
   app.use('/api/auth', authRouter);
 

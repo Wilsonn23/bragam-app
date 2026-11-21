@@ -10,6 +10,7 @@ module.exports = {
     { name: 'Health' },
     { name: 'POI' },
     { name: 'Users' },
+    { name: 'Ratings' },
   ],
   paths: {
     '/health': {
@@ -60,6 +61,57 @@ module.exports = {
           400: { $ref: '#/components/responses/ValidationError' },
           500: { $ref: '#/components/responses/DatabaseError' },
         },
+      },
+    },
+    '/api/pois/{poiId}/ratings': {
+      parameters: [{ $ref: '#/components/parameters/PoiId' }],
+      get: {
+        tags: ['Ratings'],
+        summary: 'Ambil ringkasan dan daftar rating POI',
+        responses: {
+          200: { description: 'Ringkasan rata-rata, jumlah, distribusi, dan daftar rating' },
+          404: { description: 'POI tidak ditemukan' },
+        },
+      },
+      post: {
+        tags: ['Ratings'],
+        summary: 'Buat atau memperbarui rating user untuk POI',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateRating' } } },
+        },
+        responses: {
+          201: { description: 'Rating berhasil disimpan' },
+          400: { $ref: '#/components/responses/ValidationError' },
+          404: { description: 'POI atau user tidak ditemukan' },
+        },
+      },
+    },
+    '/api/ratings/{id}': {
+      parameters: [{ $ref: '#/components/parameters/RatingId' }],
+      get: {
+        tags: ['Ratings'],
+        summary: 'Ambil satu rating',
+        responses: { 200: { description: 'Detail rating' }, 404: { description: 'Rating tidak ditemukan' } },
+      },
+      patch: {
+        tags: ['Ratings'],
+        summary: 'Perbarui rating dan/atau review',
+        requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/UpdateRating' } } } },
+        responses: { 200: { description: 'Rating diperbarui' }, 400: { $ref: '#/components/responses/ValidationError' }, 404: { description: 'Rating tidak ditemukan' } },
+      },
+      delete: {
+        tags: ['Ratings'],
+        summary: 'Hapus rating',
+        responses: { 204: { description: 'Rating dihapus' }, 404: { description: 'Rating tidak ditemukan' } },
+      },
+    },
+    '/api/users/{id}/ratings': {
+      parameters: [{ $ref: '#/components/parameters/UserId' }],
+      get: {
+        tags: ['Ratings'],
+        summary: 'Ambil semua rating milik user',
+        responses: { 200: { description: 'Daftar rating user' }, 400: { $ref: '#/components/responses/ValidationError' } },
       },
     },
     '/api/users': {
@@ -159,6 +211,18 @@ module.exports = {
         required: true,
         schema: { type: 'string', format: 'uuid' },
       },
+      PoiId: {
+        name: 'poiId',
+        in: 'path',
+        required: true,
+        schema: { type: 'string', example: 'P01' },
+      },
+      RatingId: {
+        name: 'id',
+        in: 'path',
+        required: true,
+        schema: { type: 'integer', minimum: 1 },
+      },
     },
     schemas: {
       Health: {
@@ -213,6 +277,23 @@ module.exports = {
           email: { type: 'string', format: 'email' },
           name: { type: 'string', nullable: true },
           password: { type: 'string', minLength: 8, format: 'password' },
+        },
+      },
+      CreateRating: {
+        type: 'object',
+        required: ['userId', 'rating'],
+        properties: {
+          userId: { type: 'string', format: 'uuid' },
+          rating: { type: 'integer', minimum: 1, maximum: 5, example: 5 },
+          review: { type: 'string', maxLength: 2000, nullable: true },
+        },
+      },
+      UpdateRating: {
+        type: 'object',
+        minProperties: 1,
+        properties: {
+          rating: { type: 'integer', minimum: 1, maximum: 5 },
+          review: { type: 'string', maxLength: 2000, nullable: true },
         },
       },
       Error: {
