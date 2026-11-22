@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from './theme';
@@ -14,14 +14,8 @@ const TABS = [
 export default function BottomNavBar({ activeTab, onSelectTab }) {
   const insets = useSafeAreaInsets();
 
-  // Mengangkat posisi ikon & teks di atas tombol navigasi sistem Android,
-  // sementara latar ungu tua tetap menutup penuh hingga tepi bawah layar.
-  const bottomPadding =
-    insets.bottom > 0
-      ? insets.bottom + 24
-      : Platform.OS === 'android'
-      ? 52
-      : 24;
+  // Otomatis mengikuti tinggi navigation bar tiap HP (3-tombol maupun gesture)
+  const bottomPadding = Math.max(insets.bottom, 10);
 
   const renderIcon = (key, isActive) => {
     const color = COLORS.white;
@@ -66,14 +60,7 @@ export default function BottomNavBar({ activeTab, onSelectTab }) {
   };
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingBottom: bottomPadding,
-        },
-      ]}
-    >
+    <View style={[styles.container, { paddingBottom: bottomPadding }]}>
       {TABS.map((tab) => {
         const isActive = activeTab === tab.key;
         return (

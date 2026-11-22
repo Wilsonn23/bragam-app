@@ -9,6 +9,7 @@ import {
   ScrollView,
   TextInput,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, {
@@ -43,6 +44,7 @@ const DEFAULT_USER_ORIGIN = {
 };
 
 const USER_LOCATION_ID = '__USER_GPS__';
+const DEFAULT_STAY_MINUTES = 60;
 
 function haversineMeters(a, b) {
   if (!a || !b) return 0;
@@ -56,6 +58,17 @@ function haversineMeters(a, b) {
     sinLat * sinLat +
     Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * sinLon * sinLon;
   return Math.round(R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h)));
+}
+
+function estimateWalkMinutes(fromCoord, toCoord) {
+  const meters = haversineMeters(fromCoord, toCoord);
+  return Math.max(2, Math.ceil(meters / 75));
+}
+
+function formatDateToTripTime(dateObj) {
+  const h = String(dateObj.getHours()).padStart(2, '0');
+  const m = String(dateObj.getMinutes()).padStart(2, '0');
+  return `${h}.${m}`;
 }
 
 function normalizePoiOption(item) {
@@ -80,7 +93,14 @@ function normalizePoiOption(item) {
   };
 }
 
-export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
+export default function NavigationScreen({
+  poi,
+  pois = BRAGA_POIS,
+  tripStops = null,
+  existingTripCount = 0,
+  onSaveAsTrip,
+  onBack,
+}) {
   const insets = useSafeAreaInsets();
   const topInset =
     insets.top > 0
@@ -96,6 +116,23 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
     const source = Array.isArray(pois) && pois.length > 0 ? pois : BRAGA_POIS;
     return source.map(normalizePoiOption);
   }, [pois]);
+
+  // Normalisasi rangkaian pemberhentian jika dibuka dari tombol "Pakai" di TripScreen / HomeScreen
+  const normalizedTripStops = useMemo(() => {
+    if (!Array.isArray(tripStops) || tripStops.length === 0) return [];
+    return tripStops.map((stop) => {
+      const matched = availablePois.find(
+        (item) =>
+          (stop.id && String(item.id) === String(stop.id)) ||
+          item.name.toLowerCase() === String(stop.name || '').toLowerCase()
+      );
+      return matched
+        ? { ...matched, ...stop, coordinate: matched.coordinate }
+        : normalizePoiOption(stop);
+    });
+  }, [tripStops, availablePois]);
+
+  const isTripChainMode = normalizedTripStops.length > 0;
 
   // Baca GPS perangkat secara real-time
   const locationState = useForegroundLocation(true);
@@ -121,6 +158,9 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
   }, [hasLiveGps, rawCoords?.latitude, rawCoords?.longitude]);
 
   const resolveInitialDestination = (targetProp) => {
+    if (normalizedTripStops.length > 0) {
+      return normalizedTripStops[0];
+    }
     if (targetProp) {
       const matched = availablePois.find(
         (item) =>
@@ -132,6 +172,21 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
     return availablePois[1] || availablePois[0];
   };
 
+  // State daftar POI sementara untuk navigasi non-Trip (dari Explore / HomeScreen)
+  const [adHocStops, setAdHocStops] = useState(() => {
+    if (normalizedTripStops.length > 0) return [];
+    const initial = resolveInitialDestination(poi);
+    return initial ? [initial] : [];
+  });
+
+  // Gabungan daftar pemberhentian aktif (Trip resmi vs rute multi-POI non-Trip)
+  const activeRouteStops = isTripChainMode ? normalizedTripStops : adHocStops;
+  const hasMultiStopRoute =
+    isTripChainMode || (!isTripChainMode && adHocStops.length > 1);
+  const canSaveAdHocAsTrip = !isTripChainMode && adHocStops.length > 1;
+
+  const [currentStopIndex, setCurrentStopIndex] = useState(0);
+
   // State pilihan titik awal & tujuan
   const [originSelection, setOriginSelection] = useState(
     /** @type {any} */ (USER_LOCATION_ID)
@@ -140,7 +195,23 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
     resolveInitialDestination(poi)
   );
 
-  // State modal pemilih titik & daftar langkah turn-by-turn
+  // State Pop-up "Simpan sebagai Trip"
+  const [saveTripModalVisible, setSaveTripModalVisible] = useState(false);
+  const [newTripTitle, setNewTripTitle] = useState('');
+
+  // Sinkronkan origin & destination secara berantai saat mode Trip atau Multi-POI aktif
+  useEffect(() => {
+    if (!hasMultiStopRoute || activeRouteStops.length === 0) return;
+    const safeIdx = Math.min(currentStopIndex, activeRouteStops.length - 1);
+    if (safeIdx === 0) {
+      setOriginSelection(USER_LOCATION_ID);
+    } else {
+      setOriginSelection(activeRouteStops[safeIdx - 1]);
+    }
+    setDestSelection(activeRouteStops[safeIdx]);
+  }, [hasMultiStopRoute, currentStopIndex, activeRouteStops]);
+
+  // State modal pemilih titik ('origin' | 'destination' | 'add_stop') & daftar langkah
   const [pickerTarget, setPickerTarget] = useState(null);
   const [pickerQuery, setPickerQuery] = useState('');
   const [showAllSteps, setShowAllSteps] = useState(false);
@@ -172,7 +243,9 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
 
   const activeDestCoord = isDestUser
     ? userGpsCoord
-    : destSelection?.coordinate || availablePois[0]?.coordinate || DEFAULT_USER_ORIGIN;
+    : destSelection?.coordinate ||
+      availablePois[0]?.coordinate ||
+      DEFAULT_USER_ORIGIN;
 
   // Fetch rute jalan kaki berbasis jalan raya/trotoar setiap kali origin/destination berubah signifikan (>12m)
   useEffect(() => {
@@ -208,7 +281,7 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
 
         if (res.coordinates.length > 1) {
           mapRef.current?.fitToCoordinates(res.coordinates, {
-            edgePadding: { top: 100, right: 60, bottom: 110, left: 60 },
+            edgePadding: { top: 100, right: 60, bottom: 130, left: 60 },
             animated: true,
           });
         }
@@ -257,7 +330,6 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
         ? Math.min(baseDistanceMeters, Math.max(directRemaining, 0))
         : directRemaining;
 
-    // Jika GPS aktif & pengguna sudah bergerak, hitung rasio sisa waktu secara real-time
     const remainingSeconds =
       hasLiveGps && isOriginUser
         ? Math.max(0, Math.round(remainingMeters / 1.25))
@@ -277,7 +349,6 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
       };
     }
 
-    // Tentukan step turn-by-turn mana yang sedang dilalui pengguna
     let activeStepIndex = 0;
     if (hasLiveGps && isOriginUser && routeSteps.length > 1) {
       for (let i = 0; i < routeSteps.length - 1; i++) {
@@ -300,7 +371,6 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
       icon: 'arrow-up',
     };
 
-    // Perbarui jarak pada step aktif secara real-time jika GPS bergerak
     let liveInstruction = currentStep.instruction;
     if (
       hasLiveGps &&
@@ -344,13 +414,41 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
     userGpsCoord,
   ]);
 
+  // Tukar titik hanya diizinkan jika BUKAN mode Trip
   const handleSwapPoints = () => {
+    if (isTripChainMode) return;
+
+    if (adHocStops.length > 1) {
+      setAdHocStops((prev) => [...prev].reverse());
+      setCurrentStopIndex(0);
+      return;
+    }
+
     const prevOrigin = originSelection;
     setOriginSelection(destSelection);
     setDestSelection(prevOrigin);
   };
 
   const handleSelectLocation = (chosenItem) => {
+    if (pickerTarget === 'add_stop') {
+      if (chosenItem !== USER_LOCATION_ID) {
+        setAdHocStops((prev) => {
+          const alreadyExists = prev.some(
+            (s) => String(s.id) === String(chosenItem.id)
+          );
+          if (alreadyExists) return prev;
+          const next = [...prev, chosenItem];
+          if (next.length > 1) {
+            setCurrentStopIndex(next.length - 1);
+          }
+          return next;
+        });
+      }
+      setPickerTarget(null);
+      setPickerQuery('');
+      return;
+    }
+
     if (pickerTarget === 'origin') {
       const isSameAsDest =
         (chosenItem === USER_LOCATION_ID && isDestUser) ||
@@ -369,14 +467,93 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
 
       if (isSameAsOrigin) setOriginSelection(destSelection);
       setDestSelection(chosenItem);
+
+      if (!isTripChainMode && chosenItem !== USER_LOCATION_ID) {
+        setAdHocStops((prev) => {
+          if (prev.length <= 1) return [chosenItem];
+          const updated = [...prev];
+          const safeIdx = Math.min(currentStopIndex, updated.length - 1);
+          updated[safeIdx] = chosenItem;
+          return updated;
+        });
+      }
     }
 
     setPickerTarget(null);
     setPickerQuery('');
   };
 
+  const handleRemoveAdHocStop = (stopId) => {
+    setAdHocStops((prev) => {
+      if (prev.length <= 1) return prev;
+      const next = prev.filter((s) => String(s.id) !== String(stopId));
+      setCurrentStopIndex((curr) => Math.min(curr, next.length - 1));
+      if (next.length === 1) {
+        setOriginSelection(USER_LOCATION_ID);
+        setDestSelection(next[0]);
+      }
+      return next;
+    });
+  };
+
+  // Buka pop-up "Simpan sebagai Trip"
+  const handleOpenSaveTripModal = () => {
+    setNewTripTitle(`Trip Plan ${existingTripCount + 1}`);
+    setSaveTripModalVisible(true);
+  };
+
+  // Konfirmasi "Jadikan Trip Baru" -> Hitung jam dari waktu user sekarang + estimasi waktu jalan kaki tiap POI
+  const handleConfirmSaveAdHocTrip = () => {
+    if (adHocStops.length < 2) {
+      setSaveTripModalVisible(false);
+      return;
+    }
+
+    const cleanTitle =
+      newTripTitle.trim() || `Trip Plan ${existingTripCount + 1}`;
+    let cursorMs = Date.now();
+
+    const scheduledStops = adHocStops.map((stopItem, idx) => {
+      const prevCoord =
+        idx === 0 ? userGpsCoord : adHocStops[idx - 1].coordinate;
+      const walkMins = estimateWalkMinutes(prevCoord, stopItem.coordinate);
+
+      if (idx === 0) {
+        cursorMs += walkMins * 60 * 1000;
+      } else {
+        cursorMs += (DEFAULT_STAY_MINUTES + walkMins) * 60 * 1000;
+      }
+
+      return {
+        ...stopItem,
+        time: formatDateToTripTime(new Date(cursorMs)),
+      };
+    });
+
+    const newTripPlan = {
+      id: `plan-${Date.now()}`,
+      title: cleanTitle,
+      stops: scheduledStops,
+    };
+
+    setSaveTripModalVisible(false);
+    onSaveAsTrip?.(newTripPlan);
+    Alert.alert(
+      'Trip Tersimpan',
+      `"${cleanTitle}" berhasil ditambahkan ke daftar Trip.`
+    );
+  };
+
   const handleRecenter = () => {
-    if (routeCoords.length > 1) {
+    if (hasMultiStopRoute && activeRouteStops.length > 0) {
+      mapRef.current?.fitToCoordinates(
+        [userGpsCoord, ...activeRouteStops.map((s) => s.coordinate)],
+        {
+          edgePadding: { top: 100, right: 60, bottom: 130, left: 60 },
+          animated: true,
+        }
+      );
+    } else if (routeCoords.length > 1) {
       mapRef.current?.fitToCoordinates(routeCoords, {
         edgePadding: { top: 100, right: 60, bottom: 110, left: 60 },
         animated: true,
@@ -401,6 +578,17 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
     item.name.toLowerCase().includes(pickerQuery.trim().toLowerCase())
   );
 
+  // Cek apakah origin/destination sedang ditampilkan sebagai bagian dari pin bernomor multi-stop
+  const isOriginInChain =
+    hasMultiStopRoute &&
+    !isOriginUser &&
+    activeRouteStops.some((s) => String(s.id) === String(originSelection?.id));
+
+  const isDestInChain =
+    hasMultiStopRoute &&
+    !isDestUser &&
+    activeRouteStops.some((s) => String(s.id) === String(destSelection?.id));
+
   return (
     <View style={styles.root}>
       {/* Top Route Header */}
@@ -418,64 +606,97 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
 
           <View style={styles.inputsCol}>
             <TouchableOpacity
-              activeOpacity={0.85}
+              activeOpacity={isTripChainMode ? 1 : 0.85}
+              disabled={isTripChainMode}
               onPress={() => {
                 setPickerQuery('');
                 setPickerTarget('origin');
               }}
-              style={styles.locationBox}
+              style={[
+                styles.locationBox,
+                isTripChainMode && styles.locationBoxLocked,
+              ]}
             >
               <Text style={styles.locationBoxText} numberOfLines={1}>
                 {originText}
               </Text>
-              <Ionicons
-                name="chevron-down"
-                size={16}
-                color={COLORS.primaryPurple}
-              />
+              {!isTripChainMode && (
+                <Ionicons
+                  name="chevron-down"
+                  size={16}
+                  color={COLORS.primaryPurple}
+                />
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
-              activeOpacity={0.85}
+              activeOpacity={isTripChainMode ? 1 : 0.85}
+              disabled={isTripChainMode}
               onPress={() => {
                 setPickerQuery('');
                 setPickerTarget('destination');
               }}
-              style={styles.locationBox}
+              style={[
+                styles.locationBox,
+                isTripChainMode && styles.locationBoxLocked,
+              ]}
             >
               <Text style={styles.locationBoxText} numberOfLines={1}>
                 {targetText}
               </Text>
-              <Ionicons
-                name="chevron-down"
-                size={16}
-                color={COLORS.primaryPurple}
-              />
+              {!isTripChainMode && (
+                <Ionicons
+                  name="chevron-down"
+                  size={16}
+                  color={COLORS.primaryPurple}
+                />
+              )}
             </TouchableOpacity>
           </View>
 
           <View style={styles.rightControlsCol}>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setOriginSelection(USER_LOCATION_ID)}
-              accessibilityLabel="Gunakan Lokasi GPS"
-            >
-              <MaterialIcons
-                name="gps-fixed"
-                size={22}
-                color={isOriginUser ? COLORS.darkPurple : COLORS.textMuted}
-              />
-            </TouchableOpacity>
+            {isTripChainMode ? (
+              <View
+                style={styles.lockedTopIconWrap}
+                accessibilityLabel="Mode Rencana Trip Aktif"
+              >
+                <MaterialIcons
+                  name="gps-fixed"
+                  size={20}
+                  color={COLORS.textMuted}
+                />
+              </View>
+            ) : (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => {
+                  setPickerQuery('');
+                  setPickerTarget('add_stop');
+                }}
+                style={styles.addStopIconBtn}
+                accessibilityLabel="Tambah POI Tujuan ke Rute"
+              >
+                <Ionicons name="add" size={20} color={COLORS.white} />
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
-              activeOpacity={0.8}
+              activeOpacity={isTripChainMode ? 1 : 0.8}
+              disabled={isTripChainMode}
               onPress={handleSwapPoints}
-              accessibilityLabel="Tukar Titik Awal dan Tujuan"
+              style={isTripChainMode ? styles.switchBtnLocked : undefined}
+              accessibilityLabel={
+                isTripChainMode
+                  ? 'Urutan Trip Terkunci'
+                  : 'Tukar Titik Awal dan Tujuan'
+              }
             >
               <MaterialCommunityIcons
                 name="swap-vertical"
                 size={26}
-                color={COLORS.primaryPurple}
+                color={
+                  isTripChainMode ? COLORS.textMuted : COLORS.primaryPurple
+                }
               />
             </TouchableOpacity>
           </View>
@@ -510,7 +731,20 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
             lineDashPattern={[8, 6]}
           />
 
-          {/* Jalur Rute Jalan Kaki Mengikuti Jalan (Tidak Menembus Gedung) */}
+          {/* Garis penghubung seluruh rangkaian destinasi (mode Trip & multi-POI non-Trip) */}
+          {hasMultiStopRoute && activeRouteStops.length > 0 && (
+            <Polyline
+              coordinates={[
+                userGpsCoord,
+                ...activeRouteStops.map((s) => s.coordinate),
+              ]}
+              strokeColor="rgba(126, 87, 194, 0.42)"
+              strokeWidth={3}
+              lineDashPattern={[6, 6]}
+            />
+          )}
+
+          {/* Jalur Rute Jalan Kaki Mengikuti Jalan (Segmen Aktif) */}
           {renderedRouteCoords.length > 1 && (
             <>
               <Polyline
@@ -527,49 +761,86 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
             </>
           )}
 
-          {/* Origin Marker */}
-          <Marker
-            coordinate={activeOriginCoord}
-            anchor={isOriginUser ? { x: 0.5, y: 0.5 } : { x: 0.5, y: 0.32 }}
-            centerOffset={isOriginUser ? { x: 0, y: 0 } : { x: 0, y: 12 }}
-          >
-            {isOriginUser ? (
-              <View style={styles.userPuck} />
-            ) : (
-              <View style={styles.customMarkerCol}>
-                <View style={styles.teardropPin}>
-                  <View style={styles.pinInnerHole} />
+          {/* Origin Marker (jika tidak duplikat dengan pin bernomor multi-stop) */}
+          {!isOriginInChain && (
+            <Marker
+              coordinate={activeOriginCoord}
+              anchor={isOriginUser ? { x: 0.5, y: 0.5 } : { x: 0.5, y: 0.32 }}
+              centerOffset={isOriginUser ? { x: 0, y: 0 } : { x: 0, y: 12 }}
+            >
+              {isOriginUser ? (
+                <View style={styles.userPuck} />
+              ) : (
+                <View style={styles.customMarkerCol}>
+                  <View style={styles.teardropPin}>
+                    <View style={styles.pinInnerHole} />
+                  </View>
+                  <View style={styles.markerLabelBadge}>
+                    <Text style={styles.mapLabelText} numberOfLines={1}>
+                      {originText}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.markerLabelBadge}>
-                  <Text style={styles.mapLabelText} numberOfLines={1}>
-                    {originText}
-                  </Text>
-                </View>
-              </View>
-            )}
-          </Marker>
+              )}
+            </Marker>
+          )}
 
-          {/* Destination Marker */}
-          <Marker
-            coordinate={activeDestCoord}
-            anchor={isDestUser ? { x: 0.5, y: 0.5 } : { x: 0.5, y: 0.32 }}
-            centerOffset={isDestUser ? { x: 0, y: 0 } : { x: 0, y: 12 }}
-          >
-            {isDestUser ? (
-              <View style={styles.userPuck} />
-            ) : (
-              <View style={styles.customMarkerCol}>
-                <View style={styles.teardropPin}>
-                  <View style={styles.pinInnerHole} />
+          {/* Destination Marker (mode navigasi satuan 1 POI) */}
+          {!isDestInChain && (
+            <Marker
+              coordinate={activeDestCoord}
+              anchor={isDestUser ? { x: 0.5, y: 0.5 } : { x: 0.5, y: 0.32 }}
+              centerOffset={isDestUser ? { x: 0, y: 0 } : { x: 0, y: 12 }}
+            >
+              {isDestUser ? (
+                <View style={styles.userPuck} />
+              ) : (
+                <View style={styles.customMarkerCol}>
+                  <View style={styles.teardropPin}>
+                    <View style={styles.pinInnerHole} />
+                  </View>
+                  <View style={styles.markerLabelBadge}>
+                    <Text style={styles.mapLabelText} numberOfLines={1}>
+                      {targetText}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.markerLabelBadge}>
-                  <Text style={styles.mapLabelText} numberOfLines={1}>
-                    {targetText}
-                  </Text>
-                </View>
-              </View>
-            )}
-          </Marker>
+              )}
+            </Marker>
+          )}
+
+          {/* Marker Bernomor Berantai untuk Trip maupun Multi-POI Non-Trip */}
+          {hasMultiStopRoute &&
+            activeRouteStops.map((stopItem, idx) => {
+              const isCurrentTarget = idx === currentStopIndex;
+              const isCompleted = idx < currentStopIndex;
+              return (
+                <Marker
+                  key={`chain-${stopItem.id}-${idx}`}
+                  coordinate={stopItem.coordinate}
+                  anchor={{ x: 0.5, y: 0.32 }}
+                  centerOffset={{ x: 0, y: 12 }}
+                  onPress={() => setCurrentStopIndex(idx)}
+                >
+                  <View style={styles.customMarkerCol}>
+                    <View
+                      style={[
+                        styles.teardropPin,
+                        isCurrentTarget && styles.teardropPinActive,
+                        isCompleted && styles.teardropPinCompleted,
+                      ]}
+                    >
+                      <Text style={styles.chainPinNumber}>{idx + 1}</Text>
+                    </View>
+                    <View style={styles.markerLabelBadge}>
+                      <Text style={styles.mapLabelText} numberOfLines={1}>
+                        {stopItem.name}
+                      </Text>
+                    </View>
+                  </View>
+                </Marker>
+              );
+            })}
 
           {/* Walking Duration Bubble on Route Midpoint */}
           {midPoint && (
@@ -587,6 +858,20 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
             </Marker>
           )}
         </MapView>
+
+        {/* Tombol Simpan sebagai Trip (kiri bawah peta, tepat di atas kiri slider panduan) */}
+        {canSaveAdHocAsTrip && (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={handleOpenSaveTripModal}
+            style={styles.saveTripFloatingBtn}
+          >
+            <Ionicons name="bookmark" size={16} color={COLORS.white} />
+            <Text style={styles.saveTripFloatingBtnText}>
+              Simpan sebagai Trip
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Recenter Button */}
         <TouchableOpacity
@@ -611,6 +896,67 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
         >
           <View style={styles.dragHandle} />
         </TouchableOpacity>
+
+        {/* Bar Kontrol Navigasi Berantai (Trip maupun Multi-POI Non-Trip) */}
+        {hasMultiStopRoute && (
+          <View style={styles.chainProgressBar}>
+            <View style={styles.chainProgressInfo}>
+              {currentStopIndex > 0 && (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    setCurrentStopIndex((prev) => Math.max(0, prev - 1))
+                  }
+                  style={styles.chainPrevBtn}
+                >
+                  <Ionicons
+                    name="chevron-back"
+                    size={15}
+                    color={COLORS.darkPurple}
+                  />
+                </TouchableOpacity>
+              )}
+              <Text style={styles.chainProgressText} numberOfLines={1}>
+                {isTripChainMode ? 'Stop' : 'Tujuan'} {currentStopIndex + 1}/
+                {activeRouteStops.length}:{' '}
+                {activeRouteStops[currentStopIndex]?.name}
+              </Text>
+            </View>
+
+            {!isTripChainMode && activeRouteStops.length > 1 && (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() =>
+                  handleRemoveAdHocStop(activeRouteStops[currentStopIndex]?.id)
+                }
+                style={styles.removeAdHocBtn}
+                accessibilityLabel="Hapus Tujuan Ini"
+              >
+                <Ionicons name="close" size={14} color="#C62828" />
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => {
+                if (currentStopIndex < activeRouteStops.length - 1) {
+                  setCurrentStopIndex((prev) => prev + 1);
+                } else {
+                  onBack?.();
+                }
+              }}
+              style={styles.chainNextBtn}
+            >
+              <Text style={styles.chainNextBtnText}>
+                {currentStopIndex < activeRouteStops.length - 1
+                  ? 'Lanjut POI Berikutnya →'
+                  : isTripChainMode
+                  ? 'Selesai Trip ✓'
+                  : 'Selesai Rute ✓'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.etaRow}>
           <View style={styles.etaLeft}>
@@ -689,7 +1035,59 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
         )}
       </View>
 
-      {/* Modal Pemilih Titik Awal / Titik Tujuan */}
+      {/* Pop-up Simpan sebagai Trip */}
+      <Modal
+        visible={saveTripModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setSaveTripModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setSaveTripModalVisible(false)}
+        >
+          <View
+            style={styles.saveTripModalCard}
+            onStartShouldSetResponder={() => true}
+          >
+            <Text style={styles.saveTripModalTitle}>Simpan sebagai Trip</Text>
+            <Text style={styles.saveTripModalSub}>
+              Masukkan nama rencana perjalanan untuk {adHocStops.length} POI
+              terpilih:
+            </Text>
+
+            <TextInput
+              value={newTripTitle}
+              onChangeText={setNewTripTitle}
+              placeholder="Contoh: Jalan Sore Braga"
+              placeholderTextColor={COLORS.textMuted}
+              style={styles.saveTripInput}
+              autoFocus={true}
+            />
+
+            <View style={styles.saveTripBtnRow}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => setSaveTripModalVisible(false)}
+                style={styles.saveTripCancelBtn}
+              >
+                <Text style={styles.saveTripCancelText}>Batalkan</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={handleConfirmSaveAdHocTrip}
+                style={styles.saveTripConfirmBtn}
+              >
+                <Text style={styles.saveTripConfirmText}>Jadikan Trip Baru</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Modal Pemilih Titik Awal / Titik Tujuan / Tambah POI */}
       <Modal
         visible={Boolean(pickerTarget)}
         transparent={true}
@@ -709,6 +1107,8 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
               <Text style={styles.modalTitle}>
                 {pickerTarget === 'origin'
                   ? 'Pilih Titik Awal Navigasi'
+                  : pickerTarget === 'add_stop'
+                  ? 'Tambah POI Tujuan ke Rute'
                   : 'Pilih POI Tujuan'}
               </Text>
               <TouchableOpacity onPress={() => setPickerTarget(null)}>
@@ -728,36 +1128,43 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
             </View>
 
             <ScrollView style={styles.modalList}>
-              <TouchableOpacity
-                style={[
-                  styles.modalOptionRow,
-                  ((pickerTarget === 'origin' && isOriginUser) ||
-                    (pickerTarget === 'destination' && isDestUser)) &&
-                    styles.modalOptionSelected,
-                ]}
-                onPress={() => handleSelectLocation(USER_LOCATION_ID)}
-              >
-                <View style={styles.modalOptionIcon}>
-                  <MaterialIcons
-                    name="my-location"
-                    size={18}
-                    color={COLORS.primaryPurple}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.modalOptionTitle}>
-                    Your Location (GPS)
-                  </Text>
-                  <Text style={styles.modalOptionSub}>
-                    {hasLiveGps
-                      ? 'Gunakan posisi GPS perangkat saat ini'
-                      : 'Titik default koridor Jl. Braga'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+              {pickerTarget !== 'add_stop' && (
+                <TouchableOpacity
+                  style={[
+                    styles.modalOptionRow,
+                    ((pickerTarget === 'origin' && isOriginUser) ||
+                      (pickerTarget === 'destination' && isDestUser)) &&
+                      styles.modalOptionSelected,
+                  ]}
+                  onPress={() => handleSelectLocation(USER_LOCATION_ID)}
+                >
+                  <View style={styles.modalOptionIcon}>
+                    <MaterialIcons
+                      name="my-location"
+                      size={18}
+                      color={COLORS.primaryPurple}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalOptionTitle}>
+                      Your Location (GPS)
+                    </Text>
+                    <Text style={styles.modalOptionSub}>
+                      {hasLiveGps
+                        ? 'Gunakan posisi GPS perangkat saat ini'
+                        : 'Titik default koridor Jl. Braga'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
 
               {filteredModalPois.map((item) => {
+                const isAlreadyInAdHoc =
+                  pickerTarget === 'add_stop' &&
+                  adHocStops.some((s) => String(s.id) === String(item.id));
+
                 const isSelected =
+                  isAlreadyInAdHoc ||
                   (pickerTarget === 'origin' &&
                     !isOriginUser &&
                     String(originSelection?.id) === String(item.id)) ||
@@ -768,6 +1175,7 @@ export default function NavigationScreen({ poi, pois = BRAGA_POIS, onBack }) {
                 return (
                   <TouchableOpacity
                     key={item.id}
+                    disabled={isAlreadyInAdHoc}
                     style={[
                       styles.modalOptionRow,
                       isSelected && styles.modalOptionSelected,
@@ -861,6 +1269,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 6,
   },
+  locationBoxLocked: {
+    backgroundColor: COLORS.lavenderTint,
+    borderColor: COLORS.borderSubtle,
+  },
   locationBoxText: {
     flex: 1,
     fontSize: 13,
@@ -870,7 +1282,26 @@ const styles = StyleSheet.create({
   rightControlsCol: {
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 10,
+  },
+  lockedTopIconWrap: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.45,
+  },
+  addStopIconBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.darkPurple,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+  },
+  switchBtnLocked: {
+    opacity: 0.35,
   },
   mapCanvas: {
     flex: 1,
@@ -890,6 +1321,19 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: COLORS.white,
     elevation: 3,
+  },
+  teardropPinActive: {
+    backgroundColor: COLORS.darkPurple,
+    transform: [{ scale: 1.12 }],
+  },
+  teardropPinCompleted: {
+    backgroundColor: COLORS.mediumPurple,
+    opacity: 0.78,
+  },
+  chainPinNumber: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '700',
   },
   pinInnerHole: {
     width: 16,
@@ -935,6 +1379,26 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     borderColor: COLORS.primaryPurple,
   },
+  saveTripFloatingBtn: {
+    position: 'absolute',
+    left: 18,
+    bottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.darkPurple,
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    gap: 6,
+    elevation: 4,
+  },
+  saveTripFloatingBtnText: {
+    color: COLORS.white,
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
   recenterBtn: {
     position: 'absolute',
     right: 18,
@@ -966,6 +1430,54 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: COLORS.lavenderTint,
+  },
+  chainProgressBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  chainProgressInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+  },
+  chainPrevBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.lavenderTint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeAdHocBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFEBEE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chainProgressText: {
+    flex: 1,
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: COLORS.darkPurple,
+  },
+  chainNextBtn: {
+    backgroundColor: COLORS.darkPurple,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.pill,
+  },
+  chainNextBtnText: {
+    color: COLORS.white,
+    fontSize: 11.5,
+    fontWeight: '700',
   },
   etaRow: {
     flexDirection: 'row',
@@ -1060,6 +1572,66 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(49, 20, 101, 0.45)',
     justifyContent: 'center',
     paddingHorizontal: 20,
+  },
+  saveTripModalCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    borderWidth: 2,
+    borderColor: COLORS.primaryPurple,
+    padding: 18,
+  },
+  saveTripModalTitle: {
+    fontSize: 16.5,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  saveTripModalSub: {
+    fontSize: 12.5,
+    color: COLORS.textSecondary,
+    marginBottom: 12,
+  },
+  saveTripInput: {
+    borderWidth: 1.5,
+    borderColor: COLORS.primaryPurple,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.softLilacBg,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    marginBottom: 16,
+  },
+  saveTripBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  saveTripCancelBtn: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1.5,
+    borderColor: COLORS.primaryPurple,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveTripCancelText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.primaryPurple,
+  },
+  saveTripConfirmBtn: {
+    flex: 1.2,
+    paddingVertical: 11,
+    borderRadius: RADIUS.pill,
+    backgroundColor: COLORS.darkPurple,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveTripConfirmText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.white,
   },
   modalCard: {
     backgroundColor: COLORS.white,

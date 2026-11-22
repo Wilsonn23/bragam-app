@@ -38,7 +38,7 @@ export function PoiDetailFooter({
         </View>
 
         <View style={styles.titleCol}>
-          <Text style={styles.poiTitle} numberOfLines={1}>
+          <Text style={styles.poiTitle} numberOfLines={2}>
             {name}
           </Text>
           <View style={styles.ratingRow}>
@@ -162,11 +162,13 @@ const styles = StyleSheet.create({
   titleCol: {
     flex: 1,
     justifyContent: 'center',
+    paddingRight: 8,
   },
   poiTitle: {
     fontSize: 15,
     fontWeight: '600',
     color: COLORS.textPrimary,
+    lineHeight: 20,
     marginBottom: 4,
   },
   ratingRow: {
@@ -180,6 +182,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   checkDetailBtn: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.darkPurple,
