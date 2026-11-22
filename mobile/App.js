@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, StatusBar, Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import BottomNavBar from './src/components/BottomNavBar';
@@ -18,17 +18,14 @@ import { COLORS } from './src/components/theme';
 import { usePois } from './src/poi/PoiProvider';
 import { useAppActive, useForegroundLocation } from './src/hooks/useForegroundLocation';
 import { usePoiTriggers } from './src/hooks/usePoiTriggers';
-
-const INITIAL_TRIP_PLANS = [
-  {
-    id: 'plan-1',
-    title: 'Trip Plan 1',
-    stops: [
-      { id: '1', time: '09.00', name: 'Sweet Cantina' },
-      { id: '2', time: '10.30', name: 'Kopi Toko Djawa' },
-    ],
-  },
-];
+import {
+  fetchUserBookmarks,
+  toggleUserBookmark,
+  fetchUserTrips,
+  saveUserTripPlan,
+  appendStopToExistingTrip,
+  deleteUserTripPlan,
+} from './src/services/userDataService';
 
 function MainApp() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -43,12 +40,12 @@ function MainApp() {
   const [selectedPoi, setSelectedPoi] = useState(null);
   const [selectedTrip, setSelectedTrip] = useState(null);
 
-  // State khusus Itinerary Builder & Navigasi Berantai
-  const [tripPlans, setTripPlans] = useState(INITIAL_TRIP_PLANS);
+  // State khusus Itinerary Builder & Navigasi Berantai (dimuat dari Supabase)
+  const [tripPlans, setTripPlans] = useState([]);
   const [editingTrip, setEditingTrip] = useState(null);
   const [activeTripChain, setActiveTripChain] = useState(null);
 
-  // State daftar POI yang disimpan ke Bookmark
+  // State daftar POI yang disimpan ke Bookmark (dimuat dari Supabase)
   const [bookmarkedPois, setBookmarkedPois] = useState([]);
 
   // State POI yang sedang akan ditambahkan ke Trip melalui AddToTripModal
@@ -61,6 +58,37 @@ function MainApp() {
   const [fullHeight, setFullHeight] = useState(0);
   const [currentHeight, setCurrentHeight] = useState(0);
 
+  // Muat data Bookmark & Trip user dari Supabase saat login / dataset POI siap
+  useEffect(() => {
+    let isMounted = true;
+    const userId = currentUser?.id;
+
+    if (!userId || !Array.isArray(pois) || pois.length === 0) {
+      if (!userId) {
+        setTripPlans([]);
+        setBookmarkedPois([]);
+      }
+      return;
+    }
+
+    Promise.all([
+      fetchUserBookmarks(userId, pois),
+      fetchUserTrips(userId, pois),
+    ])
+      .then(([loadedBookmarks, loadedTrips]) => {
+        if (!isMounted) return;
+        setBookmarkedPois(loadedBookmarks);
+        setTripPlans(loadedTrips);
+      })
+      .catch((err) => {
+        console.warn('Gagal memuat data user dari Supabase:', err?.message || err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser?.id, pois]);
+
   const isPoiBookmarked = (targetPoi) => {
     if (!targetPoi) return false;
     return bookmarkedPois.some(
@@ -70,15 +98,13 @@ function MainApp() {
     );
   };
 
-  const handleToggleSavePoi = (targetPoi) => {
-    if (!targetPoi) return;
+  const handleToggleSavePoi = async (targetPoi) => {
+    if (!targetPoi || !currentUser?.id) return;
+    const alreadySaved = isPoiBookmarked(targetPoi);
+
+    // Optimistic UI update
     setBookmarkedPois((prev) => {
-      const exists = prev.some(
-        (item) =>
-          (targetPoi.id && String(item.id) === String(targetPoi.id)) ||
-          item.name?.toLowerCase() === targetPoi.name?.toLowerCase()
-      );
-      if (exists) {
+      if (alreadySaved) {
         return prev.filter(
           (item) =>
             !(
@@ -89,10 +115,20 @@ function MainApp() {
       }
       return [targetPoi, ...prev];
     });
+
+    try {
+      await toggleUserBookmark(currentUser.id, targetPoi.id, alreadySaved);
+    } catch (err) {
+      Alert.alert(
+        'Gagal Menyimpan Bookmark',
+        err?.message || 'Tidak dapat menyimpan bookmark ke database.'
+      );
+    }
   };
 
-  const handleRemoveBookmark = (targetPoi) => {
-    if (!targetPoi) return;
+  const handleRemoveBookmark = async (targetPoi) => {
+    if (!targetPoi || !currentUser?.id) return;
+
     setBookmarkedPois((prev) =>
       prev.filter(
         (item) =>
@@ -102,6 +138,15 @@ function MainApp() {
           )
       )
     );
+
+    try {
+      await toggleUserBookmark(currentUser.id, targetPoi.id, true);
+    } catch (err) {
+      Alert.alert(
+        'Gagal Menghapus Bookmark',
+        err?.message || 'Tidak dapat menghapus bookmark dari database.'
+      );
+    }
   };
 
   // Buka pop-up pilih Trip atau Membuat Trip Baru dari halaman mana pun
@@ -110,7 +155,10 @@ function MainApp() {
     setPoiToAddTrip(targetPoi);
   };
 
-  const handleConfirmAddStopToExistingTrip = (tripId, newStop, tripTitle) => {
+  const handleConfirmAddStopToExistingTrip = async (tripId, newStop, tripTitle) => {
+    const targetTrip = tripPlans.find((p) => p.id === tripId);
+    const currentCount = targetTrip?.stops?.length || 0;
+
     setTripPlans((prev) =>
       prev.map((plan) => {
         if (plan.id !== tripId) return plan;
@@ -120,18 +168,36 @@ function MainApp() {
         };
       })
     );
-    Alert.alert(
-      'Ditambahkan ke Trip',
-      `${newStop.name} berhasil ditambahkan ke "${tripTitle}".`
-    );
+
+    try {
+      await appendStopToExistingTrip(currentUser.id,tripId, newStop, currentCount);
+      Alert.alert(
+        'Ditambahkan ke Trip',
+        `${newStop.name} berhasil ditambahkan ke "${tripTitle}".`
+      );
+    } catch (err) {
+      Alert.alert(
+        'Gagal Menyimpan Destinasi',
+        err?.message || 'Tidak dapat menyimpan destinasi ke database.'
+      );
+    }
   };
 
-  const handleConfirmCreateNewTripWithPoi = (createdPlan) => {
-    setTripPlans((prev) => [createdPlan, ...prev]);
-    Alert.alert(
-      'Trip Baru Dibuat',
-      `"${createdPlan.title}" berhasil dibuat dengan destinasi ${createdPlan.stops[0]?.name}.`
-    );
+  const handleConfirmCreateNewTripWithPoi = async (createdPlan) => {
+    if (!currentUser?.id) return;
+    try {
+      const savedPlan = await saveUserTripPlan(currentUser.id, createdPlan);
+      setTripPlans((prev) => [savedPlan, ...prev]);
+      Alert.alert(
+        'Trip Baru Dibuat',
+        `"${savedPlan.title}" berhasil dibuat dengan destinasi ${savedPlan.stops[0]?.name}.`
+      );
+    } catch (err) {
+      Alert.alert(
+        'Gagal Membuat Trip',
+        err?.message || 'Tidak dapat menyimpan Trip baru ke database.'
+      );
+    }
   };
 
   const handleContainerLayout = (event) => {
@@ -201,22 +267,54 @@ function MainApp() {
     setSubScreen('TripSetting');
   };
 
-  // Simpan hasil Buat Rencana Baru atau Edit Trip
-  const handleSaveTripPlan = (savedPlan) => {
-    setTripPlans((prev) => {
-      const exists = prev.some((p) => p.id === savedPlan.id);
-      if (exists) {
-        return prev.map((p) => (p.id === savedPlan.id ? savedPlan : p));
-      }
-      return [savedPlan, ...prev];
-    });
-    setEditingTrip(null);
-    setSubScreen(null);
+  // Simpan hasil Buat Rencana Baru atau Edit Trip ke Supabase
+  const handleSaveTripPlan = async (savedPlan) => {
+    if (!currentUser?.id) return;
+    try {
+      const persistedPlan = await saveUserTripPlan(currentUser.id, savedPlan);
+      setTripPlans((prev) => {
+        const exists = prev.some((p) => p.id === persistedPlan.id);
+        if (exists) {
+          return prev.map((p) => (p.id === persistedPlan.id ? persistedPlan : p));
+        }
+        return [persistedPlan, ...prev];
+      });
+      setEditingTrip(null);
+      setSubScreen(null);
+    } catch (err) {
+      Alert.alert(
+        'Gagal Menyimpan Trip',
+        err?.message || 'Tidak dapat menyimpan perubahan Trip ke database.'
+      );
+    }
+  };
+
+  // Simpan rute multi-POI dari NavigationScreen sebagai Trip baru ke Supabase
+  const handleSaveNavigationAsTrip = async (newPlan) => {
+    if (!currentUser?.id) return;
+    try {
+      const persistedPlan = await saveUserTripPlan(currentUser.id, newPlan);
+      setTripPlans((prev) => [persistedPlan, ...prev]);
+    } catch (err) {
+      Alert.alert(
+        'Gagal Menyimpan Trip',
+        err?.message || 'Tidak dapat menyimpan Trip baru ke database.'
+      );
+    }
   };
 
   // Hapus Trip Plan setelah konfirmasi "Ya"
-  const handleDeleteTripPlan = (planId) => {
+  const handleDeleteTripPlan = async (planId) => {
+    if (!currentUser?.id) return;
     setTripPlans((prev) => prev.filter((p) => p.id !== planId));
+    try {
+      await deleteUserTripPlan(currentUser.id, planId);
+    } catch (err) {
+      Alert.alert(
+        'Gagal Menghapus Trip',
+        err?.message || 'Tidak dapat menghapus Trip dari database.'
+      );
+    }
   };
 
   const handleSelectTab = (tab) => {
@@ -289,9 +387,7 @@ function MainApp() {
           pois={pois}
           tripStops={activeTripChain}
           existingTripCount={tripPlans.length}
-          onSaveAsTrip={(newPlan) => {
-            setTripPlans((prev) => [newPlan, ...prev]);
-          }}
+          onSaveAsTrip={handleSaveNavigationAsTrip}
           onBack={() => {
             setActiveTripChain(null);
             setSubScreen(null);
@@ -367,13 +463,18 @@ function MainApp() {
       default:
         return (
           <HomeScreen
+            user={currentUser}
             pois={pois}
             tripPlans={tripPlans}
+            bookmarkedPois={bookmarkedPois}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
             onOpenBookmarks={handleOpenBookmarks}
+            onToggleSave={handleToggleSavePoi}
             onAddToItinerary={handleAddToItinerary}
             onUseTrip={handleUseTrip}
+            onEditTrip={handleEditTrip}
+            onCreateTrip={handleCreateTrip}
           />
         );
     }
