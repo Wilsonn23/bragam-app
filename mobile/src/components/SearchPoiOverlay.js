@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   FlatList,
   Modal,
@@ -24,6 +25,10 @@ import { API_BASE_URL } from '../config/api';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 275;
 const EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.78;
+
+const BUDGET_MIN_LIMIT = 0;
+const BUDGET_MAX_LIMIT = 500000;
+const BUDGET_STEP = 10000;
 
 const TIME_OPTIONS = [
   { label: 'All Time', value: 'Semua' },
@@ -47,6 +52,198 @@ const RATING_OPTIONS = [
   { label: '4+ ★', value: '4' },
 ];
 
+function formatRupiahNumber(val) {
+  const num = Number(val) || 0;
+  return num.toLocaleString('id-ID');
+}
+
+function parseMoneyToken(token) {
+  if (token === null || token === undefined) return NaN;
+  if (typeof token === 'number') return Number.isFinite(token) ? token : NaN;
+  const str = String(token).trim().toLowerCase();
+  if (!str) return NaN;
+  if (str === 'free' || str === 'gratis') return 0;
+
+  const kMatch = str.match(/(\d+(?:[.,]\d+)?)\s*(k|rb|ribu)/);
+  if (kMatch) {
+    return Math.round(parseFloat(kMatch[1].replace(',', '.')) * 1000);
+  }
+
+  const digits = str.replace(/[^\d]/g, '');
+  return digits ? Number(digits) : NaN;
+}
+
+function getPoiPriceBounds(poi) {
+  const directMin = parseMoneyToken(
+    poi.price_min ?? poi.min_price ?? poi.priceMin ?? poi.minPrice
+  );
+  const directMax = parseMoneyToken(
+    poi.price_max ?? poi.max_price ?? poi.priceMax ?? poi.maxPrice
+  );
+
+  if (Number.isFinite(directMin) || Number.isFinite(directMax)) {
+    const min = Number.isFinite(directMin) ? Math.max(0, directMin) : 0;
+    const max = Number.isFinite(directMax) ? Math.max(min, directMax) : min;
+    return { min, max };
+  }
+
+  const textSource =
+    poi.priceRange ??
+    poi.price_range ??
+    poi.budget ??
+    poi.harga ??
+    poi.estimasi_harga ??
+    poi.cost ??
+    poi.price;
+
+  if (typeof textSource === 'number' && Number.isFinite(textSource)) {
+    const val = Math.max(0, textSource);
+    return { min: val, max: val };
+  }
+
+  if (typeof textSource === 'string' && textSource.trim()) {
+    const lower = textSource.trim().toLowerCase();
+    if (lower === 'free' || lower === 'gratis') {
+      return { min: 0, max: 0 };
+    }
+    const parts = lower.split(/[-–—~]|s\/d|hingga|to/).map((p) => parseMoneyToken(p));
+    const validNums = parts.filter((n) => Number.isFinite(n));
+    if (validNums.length >= 2) {
+      const min = Math.max(0, validNums[0]);
+      const max = Math.max(min, validNums[1]);
+      return { min, max };
+    }
+    if (validNums.length === 1) {
+      const val = Math.max(0, validNums[0]);
+      return { min: val, max: val };
+    }
+  }
+
+  return { min: 0, max: 0 };
+}
+
+// Komponen Dual-Thumb Budget Range Slider (sama seperti di TripSettingScreen)
+function BudgetRangeSlider({ minVal, maxVal, onChangeRange }) {
+  const [trackWidth, setTrackWidth] = useState(0);
+  const trackWidthRef = useRef(0);
+  const minValRef = useRef(minVal);
+  const maxValRef = useRef(maxVal);
+  const onChangeRangeRef = useRef(onChangeRange);
+  const startXRef = useRef(0);
+
+  minValRef.current = minVal;
+  maxValRef.current = maxVal;
+  onChangeRangeRef.current = onChangeRange;
+
+  const valueToX = (val) => {
+    if (trackWidth <= 0) return 0;
+    const clamped = Math.max(BUDGET_MIN_LIMIT, Math.min(BUDGET_MAX_LIMIT, val));
+    return (
+      ((clamped - BUDGET_MIN_LIMIT) / (BUDGET_MAX_LIMIT - BUDGET_MIN_LIMIT)) *
+      trackWidth
+    );
+  };
+
+  const xToValue = (x) => {
+    const w = trackWidthRef.current;
+    if (w <= 0) return 0;
+    const ratio = Math.max(0, Math.min(1, x / w));
+    const raw = BUDGET_MIN_LIMIT + ratio * (BUDGET_MAX_LIMIT - BUDGET_MIN_LIMIT);
+    return Math.round(raw / BUDGET_STEP) * BUDGET_STEP;
+  };
+
+  const minPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          Keyboard.dismiss();
+          const w = trackWidthRef.current;
+          startXRef.current =
+            w > 0
+              ? ((minValRef.current - BUDGET_MIN_LIMIT) /
+                  (BUDGET_MAX_LIMIT - BUDGET_MIN_LIMIT)) *
+                w
+              : 0;
+        },
+        onPanResponderMove: (_, gesture) => {
+          const nextVal = xToValue(startXRef.current + gesture.dx);
+          const clamped = Math.min(nextVal, maxValRef.current);
+          onChangeRangeRef.current?.(clamped, maxValRef.current);
+        },
+      }),
+    []
+  );
+
+  const maxPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          Keyboard.dismiss();
+          const w = trackWidthRef.current;
+          startXRef.current =
+            w > 0
+              ? ((maxValRef.current - BUDGET_MIN_LIMIT) /
+                  (BUDGET_MAX_LIMIT - BUDGET_MIN_LIMIT)) *
+                w
+              : 0;
+        },
+        onPanResponderMove: (_, gesture) => {
+          const nextVal = xToValue(startXRef.current + gesture.dx);
+          const clamped = Math.max(nextVal, minValRef.current);
+          onChangeRangeRef.current?.(minValRef.current, clamped);
+        },
+      }),
+    []
+  );
+
+  const leftPos = valueToX(minVal);
+  const rightPos = valueToX(maxVal);
+
+  return (
+    <View
+      style={styles.sliderContainer}
+      onLayout={(e) => {
+        const w = e.nativeEvent.layout.width - 28;
+        if (w > 0) {
+          trackWidthRef.current = w;
+          setTrackWidth(w);
+        }
+      }}
+    >
+      <View style={styles.sliderTrackBg} />
+      {trackWidth > 0 && (
+        <>
+          <View
+            style={[
+              styles.sliderTrackActive,
+              {
+                left: 14 + leftPos,
+                width: Math.max(0, rightPos - leftPos),
+              },
+            ]}
+          />
+          <View
+            {...minPanResponder.panHandlers}
+            style={[styles.sliderThumb, { left: leftPos }]}
+          >
+            <View style={styles.sliderThumbDot} />
+          </View>
+          <View
+            {...maxPanResponder.panHandlers}
+            style={[styles.sliderThumb, { left: rightPos }]}
+          >
+            <View style={styles.sliderThumbDot} />
+          </View>
+        </>
+      )}
+    </View>
+  );
+}
+
 export default function SearchPoiOverlay({
   visible,
   onClose,
@@ -62,9 +259,15 @@ export default function SearchPoiOverlay({
   const [selectedEnv, setSelectedEnv] = useState('Semua');
   const [selectedRating, setSelectedRating] = useState('0');
 
+  // Filter Budget (Default 0 - 500.000)
+  const [minBudget, setMinBudget] = useState(BUDGET_MIN_LIMIT);
+  const [maxBudget, setMaxBudget] = useState(BUDGET_MAX_LIMIT);
+  const [minBudgetInput, setMinBudgetInput] = useState(String(BUDGET_MIN_LIMIT));
+  const [maxBudgetInput, setMaxBudgetInput] = useState(String(BUDGET_MAX_LIMIT));
+
   const [openDropdown, setOpenDropdown] = useState(null);
 
-  const [pois, setPois] = useState([]);
+  const [rawPois, setRawPois] = useState([]);
   const [loadingPois, setLoadingPois] = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -208,21 +411,57 @@ export default function SearchPoiOverlay({
         throw new Error(json.error || `Server error (${response.status})`);
       }
 
-      setPois(json.data || []);
+      setRawPois(json.data || []);
     } catch (error) {
-      setPois([]);
+      setRawPois([]);
       setFetchError(`Gagal akses ${API_BASE_URL}: ${error.message}`);
     } finally {
       setLoadingPois(false);
     }
   }
 
+  // Handler Budget Slider + Input Rupiah
+  const handleSliderRangeChange = (nextMin, nextMax) => {
+    setMinBudget(nextMin);
+    setMaxBudget(nextMax);
+    setMinBudgetInput(String(nextMin));
+    setMaxBudgetInput(String(nextMax));
+  };
+
+  const handleMinBudgetText = (text) => {
+    const digits = text.replace(/[^0-9]/g, '');
+    setMinBudgetInput(digits);
+    const num = Number(digits) || 0;
+    const clamped = Math.min(num, maxBudget);
+    setMinBudget(Math.min(clamped, BUDGET_MAX_LIMIT));
+  };
+
+  const handleMaxBudgetText = (text) => {
+    const digits = text.replace(/[^0-9]/g, '');
+    setMaxBudgetInput(digits);
+    const num = Number(digits) || 0;
+    const clamped = Math.max(num, minBudget);
+    setMaxBudget(Math.min(clamped, BUDGET_MAX_LIMIT));
+  };
+
+  const pois = useMemo(() => {
+    const lowBudget = Math.max(0, minBudget);
+    const highBudget = Math.max(lowBudget, maxBudget);
+
+    return rawPois.filter((item) => {
+      const { min: poiMin, max: poiMax } = getPoiPriceBounds(item);
+      return poiMax >= lowBudget && poiMin <= highBudget;
+    });
+  }, [rawPois, minBudget, maxBudget]);
+
   const hasActiveFilters =
     searchQuery !== '' ||
     selectedCategory !== 'Semua' ||
     selectedTime !== 'Semua' ||
     selectedEnv !== 'Semua' ||
-    selectedRating !== '0';
+    selectedRating !== '0' ||
+    minBudget > BUDGET_MIN_LIMIT ||
+    maxBudget < BUDGET_MAX_LIMIT;
 
   const resetAllFilters = () => {
     setSearchQuery('');
@@ -230,6 +469,10 @@ export default function SearchPoiOverlay({
     setSelectedTime('Semua');
     setSelectedEnv('Semua');
     setSelectedRating('0');
+    setMinBudget(BUDGET_MIN_LIMIT);
+    setMaxBudget(BUDGET_MAX_LIMIT);
+    setMinBudgetInput(String(BUDGET_MIN_LIMIT));
+    setMaxBudgetInput(String(BUDGET_MAX_LIMIT));
   };
 
   const formatRupiah = (num) => {
@@ -380,22 +623,20 @@ export default function SearchPoiOverlay({
       transparent={true}
       animationType="none"
       statusBarTranslucent={true}
-      onRequestClose={handleClose}
+      onRequestClose={() => {
+        if (openDropdown) {
+          setOpenDropdown(null);
+        } else {
+          handleClose();
+        }
+      }}
     >
       <View style={styles.modalRoot}>
         {/* Area peta di atas slider bisa diketuk untuk menutup Search */}
-        <TouchableOpacity
-          style={styles.dismissBackdrop}
-          activeOpacity={1}
-          onPress={handleClose}
-        />
+        <Pressable style={styles.dismissBackdrop} onPress={handleClose} />
 
-        <Animated.View
-          style={[
-            styles.bottomSheet,
-            { height: sheetHeight },
-          ]}
-        >
+        {/* Slider Search terkunci di dasar layar */}
+        <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
           <View {...panResponder.panHandlers} style={styles.dragHeaderArea}>
             <TouchableOpacity
               activeOpacity={0.8}
@@ -407,7 +648,11 @@ export default function SearchPoiOverlay({
 
             <View style={styles.sheetTitleRow}>
               <Text style={styles.sheetTitle}>Search Destination</Text>
-              <TouchableOpacity onPress={handleClose} style={styles.closeCircleBtn} activeOpacity={0.8}>
+              <TouchableOpacity
+                onPress={handleClose}
+                style={styles.closeCircleBtn}
+                activeOpacity={0.8}
+              >
                 <Ionicons name="close" size={18} color={COLORS.darkPurple} />
               </TouchableOpacity>
             </View>
@@ -473,6 +718,48 @@ export default function SearchPoiOverlay({
             </ScrollView>
           </View>
 
+          {/* Filter Budget (Slider + Input Rupiah persis seperti Trip Planner) */}
+          <View style={styles.budgetFilterBox}>
+            <Text style={styles.subSectionLabel}>
+              Filter Budget (Rp{formatRupiahNumber(minBudget)} – Rp
+              {formatRupiahNumber(maxBudget)})
+            </Text>
+            <BudgetRangeSlider
+              minVal={minBudget}
+              maxVal={maxBudget}
+              onChangeRange={handleSliderRangeChange}
+            />
+            <View style={styles.budgetInputsRow}>
+              <View style={styles.budgetInputBox}>
+                <View style={styles.rupiahField}>
+                  <Text style={styles.rpPrefix}>Rp</Text>
+                  <TextInput
+                    keyboardType="numeric"
+                    value={minBudgetInput}
+                    onChangeText={handleMinBudgetText}
+                    placeholder="0"
+                    style={styles.rpInput}
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.budgetDash}>—</Text>
+
+              <View style={styles.budgetInputBox}>
+                <View style={styles.rupiahField}>
+                  <Text style={styles.rpPrefix}>Rp</Text>
+                  <TextInput
+                    keyboardType="numeric"
+                    value={maxBudgetInput}
+                    onChangeText={handleMaxBudgetText}
+                    placeholder="500000"
+                    style={styles.rpInput}
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+
           <View style={styles.resultHeader}>
             <Text style={styles.resultCountText}>Showing {pois.length} destinations</Text>
             {hasActiveFilters && (
@@ -527,14 +814,15 @@ export default function SearchPoiOverlay({
           )}
         </Animated.View>
 
-        {/* Dropdown Filter Overlay (dalam Modal yang sama agar tidak nested Modal) */}
+        {/* Pop-up Filter melayang di tengah layar & di depan bottomSheet */}
         {activeDropdown && (
-          <TouchableOpacity
-            style={styles.dropdownBackdrop}
-            activeOpacity={1}
-            onPress={() => setOpenDropdown(null)}
-          >
-            <View style={styles.dropdownSheet} onStartShouldSetResponder={() => true}>
+          <View style={styles.dropdownCenterOverlay}>
+            <Pressable
+              style={styles.dropdownBackdrop}
+              onPress={() => setOpenDropdown(null)}
+            />
+
+            <View style={styles.dropdownSheet}>
               <View style={styles.dropdownSheetHeader}>
                 <Text style={styles.dropdownSheetTitle}>{activeDropdown.title}</Text>
                 <TouchableOpacity onPress={() => setOpenDropdown(null)}>
@@ -542,7 +830,7 @@ export default function SearchPoiOverlay({
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={{ maxHeight: 280 }}>
+              <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={true}>
                 {activeDropdown.options.map((opt) => {
                   const isSelected = opt.value === activeDropdown.value;
                   return (
@@ -577,7 +865,7 @@ export default function SearchPoiOverlay({
                 })}
               </ScrollView>
             </View>
-          </TouchableOpacity>
+          </View>
         )}
       </View>
     </Modal>
@@ -587,20 +875,28 @@ export default function SearchPoiOverlay({
 const styles = StyleSheet.create({
   modalRoot: {
     flex: 1,
-    justifyContent: 'flex-end',
+    position: 'relative',
   },
   dismissBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.15)',
   },
   bottomSheet: {
-    width: '100%',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: COLORS.white,
     borderTopLeftRadius: RADIUS.sheet,
     borderTopRightRadius: RADIUS.sheet,
     borderTopWidth: 2.5,
     borderColor: COLORS.primaryPurple,
     paddingTop: 6,
+    zIndex: 10,
     elevation: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
@@ -711,6 +1007,92 @@ const styles = StyleSheet.create({
   },
   filterChevronCircleActive: {
     backgroundColor: COLORS.white,
+  },
+  budgetFilterBox: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderSubtle,
+  },
+  subSectionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
+  sliderContainer: {
+    height: 36,
+    justifyContent: 'center',
+    position: 'relative',
+    marginVertical: 2,
+  },
+  sliderTrackBg: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.lavenderTint,
+    marginHorizontal: 14,
+  },
+  sliderTrackActive: {
+    position: 'absolute',
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.primaryPurple,
+  },
+  sliderThumb: {
+    position: 'absolute',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.white,
+    borderWidth: 2.5,
+    borderColor: COLORS.darkPurple,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+  },
+  sliderThumbDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.darkPurple,
+  },
+  budgetInputsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  budgetInputBox: {
+    flex: 1,
+  },
+  rupiahField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.4,
+    borderColor: COLORS.mediumPurple,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 8,
+    height: 38,
+    backgroundColor: COLORS.softLilacBg,
+  },
+  rpPrefix: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: COLORS.darkPurple,
+    marginRight: 4,
+  },
+  rpInput: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    paddingVertical: 0,
+  },
+  budgetDash: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
   },
   resultHeader: {
     flexDirection: 'row',
@@ -840,12 +1222,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  dropdownBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(49, 20, 101, 0.45)',
+  dropdownCenterOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center',
     paddingHorizontal: 24,
-    zIndex: 40,
+    zIndex: 999,
+    elevation: 30,
+  },
+  dropdownBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(49, 20, 101, 0.45)',
   },
   dropdownSheet: {
     backgroundColor: COLORS.white,
@@ -853,6 +1247,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: COLORS.primaryPurple,
     padding: 16,
+    zIndex: 1000,
+    elevation: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
   },
   dropdownSheetHeader: {
     flexDirection: 'row',
