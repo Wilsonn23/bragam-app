@@ -15,6 +15,7 @@ import {
   Keyboard,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from './theme';
 import { WireframeImageBox } from './PoiCardComponents';
@@ -48,10 +49,10 @@ const RATING_OPTIONS = [
 
 export default function SearchPoiOverlay({
   visible,
-  windowShrink = 0,
   onClose,
   onSelectPoi,
 }) {
+  const insets = useSafeAreaInsets();
   const [categoryOptions, setCategoryOptions] = useState([
     { label: 'Category', value: 'Semua' },
   ]);
@@ -104,6 +105,7 @@ export default function SearchPoiOverlay({
 
   const handleClose = () => {
     Keyboard.dismiss();
+    setOpenDropdown(null);
     Animated.timing(sheetHeight, {
       toValue: 0,
       duration: 180,
@@ -126,7 +128,7 @@ export default function SearchPoiOverlay({
 
       const focusTimer = setTimeout(() => {
         searchInputRef.current?.focus();
-      }, 100);
+      }, 120);
 
       return () => clearTimeout(focusTimer);
     }
@@ -277,6 +279,7 @@ export default function SearchPoiOverlay({
 
   const handleChoosePoi = (item) => {
     Keyboard.dismiss();
+    setOpenDropdown(null);
     onClose?.();
     onSelectPoi?.({
       ...item,
@@ -369,218 +372,240 @@ export default function SearchPoiOverlay({
   if (!visible) return null;
 
   const activeDropdown = getDropdownConfig();
+  const bottomSafeSpace = Math.max(insets.bottom, 16);
 
   return (
-    <Animated.View
-      style={[
-        styles.bottomSheet,
-        { height: sheetHeight, bottom: -windowShrink },
-      ]}
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="none"
+      statusBarTranslucent={true}
+      onRequestClose={handleClose}
     >
-      <View {...panResponder.panHandlers} style={styles.dragHeaderArea}>
+      <View style={styles.modalRoot}>
+        {/* Area peta di atas slider bisa diketuk untuk menutup Search */}
         <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => animateSheet(!isExpanded)}
-          style={styles.dragHandleTouch}
+          style={styles.dismissBackdrop}
+          activeOpacity={1}
+          onPress={handleClose}
+        />
+
+        <Animated.View
+          style={[
+            styles.bottomSheet,
+            { height: sheetHeight },
+          ]}
         >
-          <View style={styles.dragHandle} />
-        </TouchableOpacity>
-
-        <View style={styles.sheetTitleRow}>
-          <Text style={styles.sheetTitle}>Search Destination</Text>
-          <TouchableOpacity onPress={handleClose} style={styles.closeCircleBtn} activeOpacity={0.8}>
-            <Ionicons name="close" size={18} color={COLORS.darkPurple} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.searchRow}>
-        <View style={styles.searchInputBox}>
-          <TextInput
-            ref={searchInputRef}
-            autoFocus
-            returnKeyType="search"
-            style={styles.searchInput}
-            placeholder="Type Something..."
-            placeholderTextColor={COLORS.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onFocus={() => {
-              if (!isExpanded) animateSheet(true);
-            }}
-          />
-          {searchQuery.length > 0 ? (
-            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearIconBtn}>
-              <Ionicons name="close-circle" size={19} color={COLORS.textMuted} />
+          <View {...panResponder.panHandlers} style={styles.dragHeaderArea}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => animateSheet(!isExpanded)}
+              style={styles.dragHandleTouch}
+            >
+              <View style={styles.dragHandle} />
             </TouchableOpacity>
-          ) : null}
-          <Ionicons name="search" size={20} color={COLORS.darkPurple} />
-        </View>
-      </View>
 
-      <View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.filterRow}
-        >
+            <View style={styles.sheetTitleRow}>
+              <Text style={styles.sheetTitle}>Search Destination</Text>
+              <TouchableOpacity onPress={handleClose} style={styles.closeCircleBtn} activeOpacity={0.8}>
+                <Ionicons name="close" size={18} color={COLORS.darkPurple} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.searchRow}>
+            <View style={styles.searchInputBox}>
+              <TextInput
+                ref={searchInputRef}
+                returnKeyType="search"
+                style={styles.searchInput}
+                placeholder="Type Something..."
+                placeholderTextColor={COLORS.textMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onFocus={() => {
+                  if (!isExpanded) animateSheet(true);
+                }}
+              />
+              {searchQuery.length > 0 ? (
+                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearIconBtn}>
+                  <Ionicons name="close-circle" size={19} color={COLORS.textMuted} />
+                </TouchableOpacity>
+              ) : null}
+              <Ionicons name="search" size={20} color={COLORS.darkPurple} />
+            </View>
+          </View>
+
+          <View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.filterRow}
+            >
+              <TouchableOpacity
+                style={styles.filterIconBtn}
+                onPress={hasActiveFilters ? resetAllFilters : undefined}
+              >
+                <Ionicons name="options" size={20} color={COLORS.primaryPurple} />
+              </TouchableOpacity>
+
+              {renderFilterPill(
+                'category',
+                getPillLabel(categoryOptions, selectedCategory, 'Category'),
+                selectedCategory !== 'Semua'
+              )}
+              {renderFilterPill(
+                'time',
+                getPillLabel(TIME_OPTIONS, selectedTime, 'Time'),
+                selectedTime !== 'Semua'
+              )}
+              {renderFilterPill(
+                'env',
+                getPillLabel(ENV_OPTIONS, selectedEnv, 'Environment'),
+                selectedEnv !== 'Semua'
+              )}
+              {renderFilterPill(
+                'rating',
+                getPillLabel(RATING_OPTIONS, selectedRating, 'Rating'),
+                selectedRating !== '0'
+              )}
+            </ScrollView>
+          </View>
+
+          <View style={styles.resultHeader}>
+            <Text style={styles.resultCountText}>Showing {pois.length} destinations</Text>
+            {hasActiveFilters && (
+              <TouchableOpacity onPress={resetAllFilters} activeOpacity={0.8}>
+                <Text style={styles.resetText}>Reset Filter</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {loadingPois ? (
+            <ActivityIndicator
+              size="large"
+              color={COLORS.primaryPurple}
+              style={{ marginTop: 28 }}
+            />
+          ) : (
+            <FlatList
+              data={pois}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={renderPoiItem}
+              style={styles.poiList}
+              nestedScrollEnabled={true}
+              contentContainerStyle={[
+                styles.listContent,
+                {
+                  paddingBottom:
+                    keyboardHeight > 0
+                      ? keyboardHeight + bottomSafeSpace + 12
+                      : bottomSafeSpace + 16,
+                },
+              ]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+              ListEmptyComponent={
+                <View style={styles.emptyBox}>
+                  <Ionicons
+                    name={fetchError ? 'alert-circle-outline' : 'search-outline'}
+                    size={32}
+                    color={COLORS.textMuted}
+                  />
+                  <Text style={styles.emptyText}>
+                    {fetchError || 'No destinations match your search or filter.'}
+                  </Text>
+                  {fetchError ? (
+                    <TouchableOpacity onPress={fetchPois} style={styles.retryBtn}>
+                      <Text style={styles.retryBtnText}>Coba Lagi</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              }
+            />
+          )}
+        </Animated.View>
+
+        {/* Dropdown Filter Overlay (dalam Modal yang sama agar tidak nested Modal) */}
+        {activeDropdown && (
           <TouchableOpacity
-            style={styles.filterIconBtn}
-            onPress={hasActiveFilters ? resetAllFilters : undefined}
+            style={styles.dropdownBackdrop}
+            activeOpacity={1}
+            onPress={() => setOpenDropdown(null)}
           >
-            <Ionicons name="options" size={20} color={COLORS.primaryPurple} />
-          </TouchableOpacity>
+            <View style={styles.dropdownSheet} onStartShouldSetResponder={() => true}>
+              <View style={styles.dropdownSheetHeader}>
+                <Text style={styles.dropdownSheetTitle}>{activeDropdown.title}</Text>
+                <TouchableOpacity onPress={() => setOpenDropdown(null)}>
+                  <Ionicons name="close" size={22} color={COLORS.darkPurple} />
+                </TouchableOpacity>
+              </View>
 
-          {renderFilterPill(
-            'category',
-            getPillLabel(categoryOptions, selectedCategory, 'Category'),
-            selectedCategory !== 'Semua'
-          )}
-          {renderFilterPill(
-            'time',
-            getPillLabel(TIME_OPTIONS, selectedTime, 'Time'),
-            selectedTime !== 'Semua'
-          )}
-          {renderFilterPill(
-            'env',
-            getPillLabel(ENV_OPTIONS, selectedEnv, 'Environment'),
-            selectedEnv !== 'Semua'
-          )}
-          {renderFilterPill(
-            'rating',
-            getPillLabel(RATING_OPTIONS, selectedRating, 'Rating'),
-            selectedRating !== '0'
-          )}
-        </ScrollView>
-      </View>
-
-      <View style={styles.resultHeader}>
-        <Text style={styles.resultCountText}>Showing {pois.length} destinations</Text>
-        {hasActiveFilters && (
-          <TouchableOpacity onPress={resetAllFilters} activeOpacity={0.8}>
-            <Text style={styles.resetText}>Reset Filter</Text>
+              <ScrollView style={{ maxHeight: 280 }}>
+                {activeDropdown.options.map((opt) => {
+                  const isSelected = opt.value === activeDropdown.value;
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[
+                        styles.dropdownOptionRow,
+                        isSelected && styles.dropdownOptionRowSelected,
+                      ]}
+                      onPress={() => {
+                        activeDropdown.onSelect(opt.value);
+                        setOpenDropdown(null);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.dropdownOptionText,
+                          isSelected && styles.dropdownOptionTextSelected,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                      {isSelected && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color={COLORS.darkPurple}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
           </TouchableOpacity>
         )}
       </View>
-
-      {loadingPois ? (
-        <ActivityIndicator
-          size="large"
-          color={COLORS.primaryPurple}
-          style={{ marginTop: 28 }}
-        />
-      ) : (
-        <FlatList
-          data={pois}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderPoiItem}
-          style={styles.poiList}
-          nestedScrollEnabled={true}
-          contentContainerStyle={[
-            styles.listContent,
-            keyboardHeight > 0 ? { paddingBottom: keyboardHeight + 24 } : null,
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={true}
-          ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <Ionicons
-                name={fetchError ? 'alert-circle-outline' : 'search-outline'}
-                size={32}
-                color={COLORS.textMuted}
-              />
-              <Text style={styles.emptyText}>
-                {fetchError || 'No destinations match your search or filter.'}
-              </Text>
-              {fetchError ? (
-                <TouchableOpacity onPress={fetchPois} style={styles.retryBtn}>
-                  <Text style={styles.retryBtnText}>Coba Lagi</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          }
-        />
-      )}
-
-      <Modal
-        visible={Boolean(activeDropdown)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setOpenDropdown(null)}
-      >
-        <TouchableOpacity
-          style={styles.dropdownBackdrop}
-          activeOpacity={1}
-          onPress={() => setOpenDropdown(null)}
-        >
-          <View style={styles.dropdownSheet} onStartShouldSetResponder={() => true}>
-            {activeDropdown && (
-              <>
-                <View style={styles.dropdownSheetHeader}>
-                  <Text style={styles.dropdownSheetTitle}>{activeDropdown.title}</Text>
-                  <TouchableOpacity onPress={() => setOpenDropdown(null)}>
-                    <Ionicons name="close" size={22} color={COLORS.darkPurple} />
-                  </TouchableOpacity>
-                </View>
-
-                <ScrollView style={{ maxHeight: 280 }}>
-                  {activeDropdown.options.map((opt) => {
-                    const isSelected = opt.value === activeDropdown.value;
-                    return (
-                      <TouchableOpacity
-                        key={opt.value}
-                        style={[
-                          styles.dropdownOptionRow,
-                          isSelected && styles.dropdownOptionRowSelected,
-                        ]}
-                        onPress={() => {
-                          activeDropdown.onSelect(opt.value);
-                          setOpenDropdown(null);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.dropdownOptionText,
-                            isSelected && styles.dropdownOptionTextSelected,
-                          ]}
-                        >
-                          {opt.label}
-                        </Text>
-                        {isSelected && (
-                          <Ionicons
-                            name="checkmark-circle"
-                            size={20}
-                            color={COLORS.darkPurple}
-                          />
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </>
-            )}
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </Animated.View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  dismissBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+  },
   bottomSheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    width: '100%',
     backgroundColor: COLORS.white,
     borderTopLeftRadius: RADIUS.sheet,
     borderTopRightRadius: RADIUS.sheet,
     borderTopWidth: 2.5,
     borderColor: COLORS.primaryPurple,
     paddingTop: 6,
-    zIndex: 30,
-    elevation: 8,
+    elevation: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
     overflow: 'hidden',
   },
   poiList: {
@@ -816,10 +841,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   dropdownBackdrop: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(49, 20, 101, 0.45)',
     justifyContent: 'center',
     paddingHorizontal: 24,
+    zIndex: 40,
   },
   dropdownSheet: {
     backgroundColor: COLORS.white,
