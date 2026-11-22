@@ -11,6 +11,7 @@ import {
   Alert,
   PanResponder,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ import { COLORS, RADIUS } from '../components/theme';
 import { PoiFirstImage } from '../components/PoiImageGallery';
 import { BRAGA_POIS } from '../constants/bragaMapData';
 import { distanceMeters } from '../location/distance';
+import { API_BASE_URL } from '../config/api';
 
 const MAX_DESTINATIONS = 12;
 const BUDGET_MIN_LIMIT = 0;
@@ -33,9 +35,10 @@ const TIME_OPTIONS = [
 ];
 
 const ENV_OPTIONS = [
-  { label: 'Both', value: 'Semua' },
+  { label: 'All Area', value: 'Semua' },
   { label: 'Indoor', value: 'indoor' },
   { label: 'Outdoor', value: 'outdoor' },
+  { label: 'Both', value: 'both' },
 ];
 
 const RATING_OPTIONS = [
@@ -83,34 +86,6 @@ function extractSubcategory(poi) {
     return cat;
   }
   return classifyMainCategory(poi) === 'Kuliner' ? 'Kafe & Kuliner' : 'Wisata & Hiburan';
-}
-
-function normalizePoiEnvironment(poi) {
-  const raw = String(
-    poi.environment ??
-      poi.area ??
-      poi.area_type ??
-      poi.areaType ??
-      poi.setting ??
-      poi.indoor_outdoor ??
-      poi.indoorOutdoor ??
-      ''
-  )
-    .trim()
-    .toLowerCase();
-
-  if (!raw) return 'both';
-  if (
-    raw === 'both' ||
-    (raw.includes('indoor') && raw.includes('outdoor')) ||
-    raw.includes('semi') ||
-    raw.includes('keduanya')
-  ) {
-    return 'both';
-  }
-  if (raw.includes('indoor') || raw.includes('dalam')) return 'indoor';
-  if (raw.includes('outdoor') || raw.includes('luar')) return 'outdoor';
-  return 'both';
 }
 
 function getPoiHoursLabel(poi) {
@@ -581,7 +556,6 @@ export default function TripSettingScreen({
         ...merged,
         mainCategory: classifyMainCategory(merged),
         subCategory: extractSubcategory(merged),
-        normalizedEnv: normalizePoiEnvironment(merged),
         priceBounds: getPoiPriceBounds(merged),
         hoursLabel: getPoiHoursLabel(merged),
       };
@@ -650,13 +624,19 @@ export default function TripSettingScreen({
   const [tempHour, setTempHour] = useState(9);
   const [tempMinute, setTempMinute] = useState(0);
 
-  // Filter Mode "Pilih Manual"
+  // Filter Mode "Pilih Manual" (menggunakan /api/pois/search seperti SearchPoiOverlay)
+  const [categoryOptions, setCategoryOptions] = useState([
+    { label: 'Category', value: 'Semua' },
+  ]);
   const [manualQuery, setManualQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [selectedTime, setSelectedTime] = useState('Semua');
   const [selectedEnv, setSelectedEnv] = useState('Semua');
   const [selectedRating, setSelectedRating] = useState('0');
   const [openDropdown, setOpenDropdown] = useState(null);
+
+  const [manualApiPois, setManualApiPois] = useState([]);
+  const [loadingManualPois, setLoadingManualPois] = useState(false);
 
   const [manualMinBudget, setManualMinBudget] = useState(BUDGET_MIN_LIMIT);
   const [manualMaxBudget, setManualMaxBudget] = useState(BUDGET_MAX_LIMIT);
@@ -667,15 +647,102 @@ export default function TripSettingScreen({
     String(BUDGET_MAX_LIMIT)
   );
 
-  const categoryOptions = useMemo(() => {
-    const uniqueCats = Array.from(
-      new Set(datasetPois.map((p) => p.category || p.subCategory).filter(Boolean))
-    );
-    return [
-      { label: 'Category', value: 'Semua' },
-      ...uniqueCats.map((cat) => ({ label: cat, value: cat })),
-    ];
+  // Ambil daftar kategori langsung dari /api/categories
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/categories`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+        if (Array.isArray(json.categories) && json.categories.length > 0) {
+          setCategoryOptions(
+            json.categories.map((cat) => ({
+              label: cat === 'Semua' ? 'Category' : cat,
+              value: cat,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        const uniqueCats = Array.from(
+          new Set(datasetPois.map((p) => p.category || p.subCategory).filter(Boolean))
+        );
+        setCategoryOptions([
+          { label: 'Category', value: 'Semua' },
+          ...uniqueCats.map((cat) => ({ label: cat, value: cat })),
+        ]);
+      });
   }, [datasetPois]);
+
+  // Ambil hasil pencarian & filter langsung dari /api/pois/search seperti di SearchPoiOverlay
+  useEffect(() => {
+    if (mode !== 'manual') return;
+    let isCancelled = false;
+
+    const timer = setTimeout(async () => {
+      setLoadingManualPois(true);
+      try {
+        const params = new URLSearchParams({
+          q: manualQuery,
+          category: selectedCategory,
+          time_category: selectedTime,
+          environment: selectedEnv,
+          min_rating: selectedRating,
+        });
+
+        const response = await fetch(
+          `${API_BASE_URL}/api/pois/search?${params.toString()}`
+        );
+        const json = await response.json();
+
+        if (!response.ok) {
+          throw new Error(json.error || `Server error (${response.status})`);
+        }
+
+        if (!isCancelled) {
+          const rows = Array.isArray(json.data) ? json.data : [];
+          setManualApiPois(
+            rows.map((item) => {
+              const localFallback = datasetPois.find(
+                (d) =>
+                  (item.id && String(d.id) === String(item.id)) ||
+                  d.name?.toLowerCase() === item.name?.toLowerCase()
+              );
+              const merged = { ...localFallback, ...item };
+              return {
+                ...merged,
+                mainCategory: classifyMainCategory(merged),
+                subCategory: extractSubcategory(merged),
+                priceBounds: getPoiPriceBounds(merged),
+                hoursLabel: getPoiHoursLabel(merged),
+              };
+            })
+          );
+        }
+      } catch (err) {
+        if (!isCancelled) {
+          console.log('Fallback filter lokal manual:', err.message);
+          setManualApiPois(datasetPois);
+        }
+      } finally {
+        if (!isCancelled) {
+          setLoadingManualPois(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    mode,
+    manualQuery,
+    selectedCategory,
+    selectedTime,
+    selectedEnv,
+    selectedRating,
+    datasetPois,
+  ]);
 
   // Hitung ulang seluruh jam pada stops secara berurutan (real-time cascade)
   const recalculateSchedule = (list, baseStartMins, anchorIndex = 0) => {
@@ -1015,60 +1082,16 @@ export default function TripSettingScreen({
     </TouchableOpacity>
   );
 
+  // Filter budget diterapkan pada hasil dari /api/pois/search
   const filteredManualPois = useMemo(() => {
-    const q = manualQuery.trim().toLowerCase();
     const lowBudget = Math.max(0, manualMinBudget);
     const highBudget = Math.max(lowBudget, manualMaxBudget);
 
-    return datasetPois.filter((p) => {
-      const textMatch =
-        !q ||
-        p.name?.toLowerCase().includes(q) ||
-        p.category?.toLowerCase().includes(q) ||
-        p.subCategory?.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q);
-
-      const catMatch =
-        selectedCategory === 'Semua' ||
-        String(p.category || '').toLowerCase() === selectedCategory.toLowerCase() ||
-        String(p.subCategory || '').toLowerCase() === selectedCategory.toLowerCase();
-
-      const timeMatch =
-        selectedTime === 'Semua' ||
-        String(p.time_category || '').toLowerCase() === selectedTime.toLowerCase() ||
-        (selectedTime === 'pagi' && isPoiOpenAtMinutes(p, 9 * 60)) ||
-        (selectedTime === 'siang' && isPoiOpenAtMinutes(p, 14 * 60)) ||
-        (selectedTime === 'malam' && isPoiOpenAtMinutes(p, 20 * 60));
-
-      const envMatch =
-        selectedEnv === 'Semua' ||
-        p.normalizedEnv === selectedEnv ||
-        p.normalizedEnv === 'both';
-
-      const ratingMatch = (Number(p.rating) || 0) >= Number(selectedRating || 0);
-
-      const { min: poiMin, max: poiMax } = p.priceBounds;
-      const budgetMatch = poiMax >= lowBudget && poiMin <= highBudget;
-
-      return (
-        textMatch &&
-        catMatch &&
-        timeMatch &&
-        envMatch &&
-        ratingMatch &&
-        budgetMatch
-      );
+    return manualApiPois.filter((p) => {
+      const { min: poiMin, max: poiMax } = p.priceBounds || getPoiPriceBounds(p);
+      return poiMax >= lowBudget && poiMin <= highBudget;
     });
-  }, [
-    datasetPois,
-    manualQuery,
-    selectedCategory,
-    selectedTime,
-    selectedEnv,
-    selectedRating,
-    manualMinBudget,
-    manualMaxBudget,
-  ]);
+  }, [manualApiPois, manualMinBudget, manualMaxBudget]);
 
   const activeDropdown = getDropdownConfig();
 
@@ -1461,7 +1484,6 @@ export default function TripSettingScreen({
             <View style={styles.resultHeader}>
               <Text style={styles.resultCountText}>
                 Menampilkan {filteredManualPois.length} destinasi
-                {filteredManualPois.length > 5}
               </Text>
               {hasActiveFilters && (
                 <TouchableOpacity onPress={resetAllFilters} activeOpacity={0.8}>
@@ -1471,7 +1493,13 @@ export default function TripSettingScreen({
             </View>
 
             {/* Daftar Card POI: Maksimal 5 POI terlihat sekaligus, sisa digulir atas-bawah */}
-            {filteredManualPois.length === 0 ? (
+            {loadingManualPois ? (
+              <ActivityIndicator
+                size="small"
+                color={COLORS.primaryPurple}
+                style={{ marginVertical: 20 }}
+              />
+            ) : filteredManualPois.length === 0 ? (
               <View style={styles.emptyBox}>
                 <Ionicons
                   name="search-outline"
