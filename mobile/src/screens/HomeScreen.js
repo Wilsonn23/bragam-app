@@ -11,17 +11,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
-import { PoiDetailFooter } from '../components/PoiCardComponents';
-import { PoiFirstImage } from '../components/PoiImageGallery';
 import { BRAGA_POIS } from '../constants/bragaMapData';
-import { ContextBanner, MatchBadge, ReasonChips } from '../components/RecommendationParts';
+import { ContextBanner } from '../components/RecommendationParts';
+import RecommendationCarousel from '../components/RecommendationCarousel';
 
 const HOME_RECOMMENDATION_COUNT = 5;
-
-function formatRecommendationDistance(meters) {
-  if (!Number.isFinite(meters)) return '';
-  return meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
-}
 
 function haversineMeters(a, b) {
   if (!a || !b) return 0;
@@ -133,26 +127,10 @@ export default function HomeScreen({
   const activeTripStops = activeTrip?.stops || [];
 
   // Rekomendasi kontekstual (preferensi, waktu, lokasi, rating, cuaca) dari engine
-  const [recommendedIndex, setRecommendedIndex] = useState(0);
   const recommendedItems = useMemo(
     () => (recommendations?.items || []).slice(0, HOME_RECOMMENDATION_COUNT),
     [recommendations]
   );
-  const activeRecommendedIndex = recommendedItems.length
-    ? recommendedIndex % recommendedItems.length
-    : 0;
-  const currentRecommendedItem = recommendedItems[activeRecommendedIndex] || null;
-  const currentRecommended = currentRecommendedItem?.poi || null;
-
-  const isCurrentRecommendedSaved = useMemo(() => {
-    if (!currentRecommended) return false;
-    return bookmarkedPois.some(
-      (item) =>
-        (currentRecommended.id &&
-          String(item.id) === String(currentRecommended.id)) ||
-        item.name?.toLowerCase() === currentRecommended.name?.toLowerCase()
-    );
-  }, [bookmarkedPois, currentRecommended]);
 
   const handlePrevTrip = () => {
     if (tripPlans.length <= 1) return;
@@ -162,18 +140,6 @@ export default function HomeScreen({
   const handleNextTrip = () => {
     if (tripPlans.length <= 1) return;
     setTripIndex((prev) => (prev + 1) % tripPlans.length);
-  };
-
-  const handlePrevRecommended = () => {
-    if (recommendedItems.length <= 1) return;
-    setRecommendedIndex(
-      (activeRecommendedIndex - 1 + recommendedItems.length) % recommendedItems.length
-    );
-  };
-
-  const handleNextRecommended = () => {
-    if (recommendedItems.length <= 1) return;
-    setRecommendedIndex((activeRecommendedIndex + 1) % recommendedItems.length);
   };
 
   return (
@@ -445,86 +411,18 @@ export default function HomeScreen({
             </View>
           )}
 
-          {currentRecommended ? (
+          {recommendedItems.length > 0 ? (
             <>
-              <View style={styles.carouselWrapper}>
-                {recommendedItems.length > 1 && (
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={handlePrevRecommended}
-                    style={[styles.carouselArrowBtn, styles.carouselArrowLeft]}
-                    accessibilityLabel="Rekomendasi Sebelumnya"
-                  >
-                    <Ionicons
-                      name="chevron-back"
-                      size={18}
-                      color={COLORS.darkPurple}
-                    />
-                  </TouchableOpacity>
-                )}
-
-                <View style={styles.recommendedCard}>
-                  <View>
-                    <PoiFirstImage
-                      poi={currentRecommended}
-                      style={styles.recommendationImage}
-                    />
-                    <View style={styles.recoRankPill}>
-                      <Text style={styles.recoRankText}>#{activeRecommendedIndex + 1}</Text>
-                    </View>
-                    <MatchBadge
-                      percent={currentRecommendedItem.matchPercent}
-                      style={styles.recoMatchBadge}
-                    />
-                  </View>
-
-                  <View style={styles.recommendedBody}>
-                    <ReasonChips reasons={currentRecommendedItem.reasons} />
-                    <View style={{ height: currentRecommendedItem.reasons.length ? 8 : 0 }} />
-                    <PoiDetailFooter
-                      name={currentRecommended.name}
-                      rating={currentRecommended.rating}
-                      distance={formatRecommendationDistance(currentRecommendedItem.distanceMeters)}
-                      isSaved={isCurrentRecommendedSaved}
-                      onCheckDetail={() => onOpenDetail?.(currentRecommended)}
-                      onDirections={() => onOpenDirections?.(currentRecommended)}
-                      onSave={() => onToggleSave?.(currentRecommended)}
-                      onAddToItinerary={() =>
-                        onAddToItinerary?.(currentRecommended)
-                      }
-                    />
-                  </View>
-                </View>
-
-                {recommendedItems.length > 1 && (
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={handleNextRecommended}
-                    style={[styles.carouselArrowBtn, styles.carouselArrowRight]}
-                    accessibilityLabel="Rekomendasi Berikutnya"
-                  >
-                    <Ionicons
-                      name="chevron-forward"
-                      size={18}
-                      color={COLORS.darkPurple}
-                    />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Bottom Carousel Dots (Top rekomendasi) */}
-              <View style={[styles.dotsRow, { marginTop: 12 }]}>
-                {recommendedItems.map((item, idx) => (
-                  <TouchableOpacity
-                    key={item.poi.id || idx}
-                    onPress={() => setRecommendedIndex(idx)}
-                    style={[
-                      styles.dot,
-                      idx === activeRecommendedIndex && styles.dotActive,
-                    ]}
-                  />
-                ))}
-              </View>
+              {/* Geser kartu untuk melihat rekomendasi lain */}
+              <RecommendationCarousel
+                items={recommendedItems}
+                bookmarkedPois={bookmarkedPois}
+                bleed={20}
+                onOpenDetail={onOpenDetail}
+                onOpenDirections={onOpenDirections}
+                onToggleSave={onToggleSave}
+                onAddToItinerary={onAddToItinerary}
+              />
 
               {onOpenRecommendations && (
                 <TouchableOpacity
@@ -857,23 +755,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textPrimary,
   },
-  recommendedCard: {
-    borderWidth: 1.5,
-    borderColor: COLORS.borderSubtle,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.white,
-    overflow: 'hidden',
-  },
-  recommendationImage: {
-    width: '100%',
-    height: 150,
-    backgroundColor: COLORS.lavenderTint,
-  },
-  recommendedBody: {
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 12,
-  },
   recoContextWrap: {
     marginBottom: 14,
   },
@@ -892,25 +773,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: COLORS.darkPurple,
-  },
-  recoRankPill: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  recoRankText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: COLORS.darkPurple,
-  },
-  recoMatchBadge: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
   },
   recoSeeAllBtn: {
     flexDirection: 'row',
