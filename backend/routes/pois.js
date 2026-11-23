@@ -11,7 +11,7 @@ router.get('/pois', async (req, res, next) => {
              description, address, history, opening_hours, menu_highlights,
              time_category, environment, avg_duration_minutes,
              price_min, price_max, rating, reviews_count,
-             image_url, notification_title, notification_body,
+             notification_title, notification_body,
              cooldown_seconds, audio_guide_url
       FROM pois
       ORDER BY id
@@ -139,7 +139,7 @@ router.get('/pois/nearby', async (req, res, next) => {
              description, address, history, opening_hours, menu_highlights,
              time_category, environment, avg_duration_minutes,
              price_min, price_max, rating, reviews_count,
-             image_url, notification_title, notification_body, cooldown_seconds, audio_guide_url,
+             notification_title, notification_body, cooldown_seconds, audio_guide_url,
              ST_Distance(
                location::geography,
                ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
@@ -212,7 +212,7 @@ router.get('/pois/:id', async (req, res, next) => {
              description, address, history, opening_hours, menu_highlights,
              time_category, environment, avg_duration_minutes,
              price_min, price_max, rating, reviews_count,
-             image_url, notification_title, notification_body, cooldown_seconds, audio_guide_url
+             notification_title, notification_body, cooldown_seconds, audio_guide_url
       FROM pois
       WHERE id = $1
       LIMIT 1

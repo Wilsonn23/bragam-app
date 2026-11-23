@@ -54,6 +54,8 @@ for (const path of ['/api/pois', '/api/pois/P01', '/api/pois/nearby?latitude=-6.
   for (const field of ['address','opening_hours','menu_highlights','price_min','price_max','rating','reviews_count','notification_body','cooldown_seconds']) {
    assert.match(queries[0].sql,new RegExp(`\\b${field}\\b`));
   }
+  // pois.image_url was dropped from the database; photos come only from poi_images.
+  assert.doesNotMatch(queries[0].sql,/\bimage_url\b/);
   assert.equal(queries.length,3);
   const ratingQuery=queries.find(q=>/FROM poi_ratings/.test(q.sql));
   const imageQuery=queries.find(q=>/FROM poi_images/.test(q.sql));
