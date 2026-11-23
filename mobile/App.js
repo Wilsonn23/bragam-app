@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet, StatusBar, Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import BottomNavBar from './src/components/BottomNavBar';
@@ -26,10 +26,22 @@ import {
   appendStopToExistingTrip,
   deleteUserTripPlan,
 } from './src/services/userDataService';
+import { applyRatingOverrides } from './src/poi/ratings';
 
 function MainApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const { pois, loading, error } = usePois();
+  // Fresh ratings fetched on the detail Review tab. Applied only to what screens display;
+  // the geofence keeps the original `pois` so its visit/cooldown state is never reset.
+  const [ratingOverrides, setRatingOverrides] = useState({});
+  const displayPois = useMemo(() => applyRatingOverrides(pois, ratingOverrides), [pois, ratingOverrides]);
+  const handleRatingChange = (poiId, next) => {
+    setRatingOverrides((prev) => {
+      const current = prev[poiId];
+      if (current && current.rating === next.rating && current.reviewsCount === next.reviewsCount) return prev;
+      return { ...prev, [poiId]: next };
+    });
+  };
   const active = useAppActive();
   const gps = useForegroundLocation(active);
   const { event, dismiss } = usePoiTriggers(pois, gps.sample, active);
@@ -212,8 +224,8 @@ function MainApp() {
     fullHeight > 0 && currentHeight > 0 ? Math.max(0, fullHeight - currentHeight) : 0;
 
   const handleOpenDetail = (poi) => {
-    const byId = pois.find((item) => item.id === poi?.id);
-    const byName = pois.filter(
+    const byId = displayPois.find((item) => item.id === poi?.id);
+    const byName = displayPois.filter(
       (item) => item.name.toLowerCase() === poi?.name?.toLowerCase()
     );
     const selected = byId || (byName.length === 1 ? byName[0] : null);
@@ -343,6 +355,8 @@ function MainApp() {
           onAddToItinerary={handleAddToItinerary}
           onBack={() => setSubScreen(null)}
           onOpenDirections={handleOpenDirections}
+          currentUser={currentUser}
+          onRatingChange={handleRatingChange}
         />
       );
     }
@@ -364,7 +378,7 @@ function MainApp() {
       return (
         <TripSettingScreen
           initialPlan={editingTrip}
-          pois={pois}
+          pois={displayPois}
           existingCount={tripPlans.length}
           onSavePlan={handleSaveTripPlan}
           onBack={() => {
@@ -384,7 +398,7 @@ function MainApp() {
               : selectedPoi?.id || selectedPoi?.name
           }
           poi={selectedPoi}
-          pois={pois}
+          pois={displayPois}
           tripStops={activeTripChain}
           existingTripCount={tripPlans.length}
           onSaveAsTrip={handleSaveNavigationAsTrip}
@@ -410,7 +424,7 @@ function MainApp() {
         return (
           <HomeScreen
             user={currentUser}
-            pois={pois}
+            pois={displayPois}
             tripPlans={tripPlans}
             bookmarkedPois={bookmarkedPois}
             onOpenDetail={handleOpenDetail}
@@ -427,7 +441,7 @@ function MainApp() {
         return (
           <ExploreScreen
             windowShrink={windowShrink}
-            pois={pois}
+            pois={displayPois}
             bookmarkedPois={bookmarkedPois}
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
@@ -446,7 +460,7 @@ function MainApp() {
         return (
           <TripScreen
             plans={tripPlans}
-            pois={pois}
+            pois={displayPois}
             onUseTrip={handleUseTrip}
             onEditTrip={handleEditTrip}
             onCreateTrip={handleCreateTrip}
@@ -464,7 +478,7 @@ function MainApp() {
         return (
           <HomeScreen
             user={currentUser}
-            pois={pois}
+            pois={displayPois}
             tripPlans={tripPlans}
             bookmarkedPois={bookmarkedPois}
             onOpenDetail={handleOpenDetail}

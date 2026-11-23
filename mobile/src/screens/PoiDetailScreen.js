@@ -10,10 +10,11 @@ import { distanceMeters } from '../location/distance';
 import { useGuideAudio } from '../audio/AudioProvider';
 import { audioSourceFor, bundledAudioFor, AUDIO_ERROR } from '../audio/guideController';
 import { POI_AUDIO_ASSETS } from '../audio/guideAssets';
+import PoiRatingSection from '../components/PoiRatingSection';
 
 const DETAIL_TABS = ['Overview', 'Menu', 'Review', 'About'];
 
-export default function PoiDetailScreen({ poi, onBack, onOpenDirections, isSaved = false, onToggleSave = undefined, onAddToItinerary = undefined }) {
+export default function PoiDetailScreen({ poi, onBack, onOpenDirections, isSaved = false, onToggleSave = undefined, onAddToItinerary = undefined, currentUser = null, onRatingChange = undefined }) {
   const appActive = useAppActive();
   const { sample } = useForegroundLocation(appActive);
   const audio = useGuideAudio();
@@ -34,7 +35,16 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections, isSaved
     });
     return () => { clearInterval(timer); subscription.remove(); };
   }, []);
-  const fields = getPoiDetailFields({ ...poi, distanceMeters: distanceMeters(sample, poi) });
+  // Live rating from the Review tab overrides the (possibly stale) list snapshot.
+  const [liveRating, setLiveRating] = useState(null);
+  const ratedPoi = liveRating ? { ...poi, rating: liveRating.rating, reviewsCount: liveRating.reviewsCount } : poi;
+  const handleSummaryChange = summary => {
+    const next = { rating: summary.averageRating, reviewsCount: summary.reviewCount };
+    setLiveRating(next);
+    onRatingChange?.(poi.id, next);
+  };
+  const fields = getPoiDetailFields({ ...ratedPoi, distanceMeters: distanceMeters(sample, poi) });
+  const reviewCount = Number.isInteger(ratedPoi.reviewsCount) ? ratedPoi.reviewsCount : null;
   const operatingStatus = getOperatingStatus(poi.openingHours, new Date(now));
   const images = getPoiGalleryImages(poi).filter(uri => !failedImages.includes(uri));
 
@@ -54,12 +64,15 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections, isSaved
           <View style={styles.titleCol}>
             <Text accessibilityRole="header" style={styles.poiTitle}>{poi.name}</Text>
             <Text style={styles.categoryText}>{poi.category}</Text>
-            <View style={styles.ratingRow}>
+            <TouchableOpacity style={styles.ratingRow} onPress={() => setActiveTab('Review')}
+              accessibilityRole="button" accessibilityLabel={`${fields.ratingSummary}. Lihat ulasan`}>
               <Text style={styles.ratingText}>{fields.rating}</Text>
-              {getRatingStars(poi.rating).map((name, index) => (
+              {getRatingStars(ratedPoi.rating).map((name, index) => (
                 <Ionicons key={index} name={name} size={14} color={COLORS.darkPurple} />
               ))}
-            </View>
+              {fields.hasRating && reviewCount !== null &&
+                <Text style={styles.reviewCountText}>({reviewCount})</Text>}
+            </TouchableOpacity>
           </View>
           <TouchableOpacity accessibilityRole="button" accessibilityLabel={audioLoading ? 'Batalkan pemuatan audio' : audioLabel}
             accessibilityState={{ disabled: audioSource === null, busy: !!audioLoading }}
@@ -101,23 +114,23 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections, isSaved
             ))}
           </View>
         </View>
-        <View style={styles.overviewList}>
-          {activeTab === 'Overview' && <>
-            <DetailRow icon="information-circle-outline" value={fields.description} />
-            <DetailRow icon="location-outline" value={fields.address} />
-            <DetailRow icon="time-outline" value={operatingStatus ? `${operatingStatus}  |  ${fields.openingHours}` : fields.openingHours} />
-            <DetailRow icon="globe-outline" value={fields.website} />
-          </>}
-          {activeTab === 'Menu' && <>
-            <DetailRow icon="restaurant-outline" value={fields.menu} />
-            <DetailRow icon="pricetag-outline" value={fields.prices} />
-          </>}
-          {activeTab === 'Review' && <>
-            <DetailRow icon="star-outline" value={fields.ratingSummary} />
-            <DetailRow icon="chatbubble-outline" value={fields.reviews} />
-          </>}
-          {activeTab === 'About' && <DetailRow icon="book-outline" value={fields.history} />}
-        </View>
+        {activeTab === 'Review' ? (
+          <PoiRatingSection poi={poi} currentUser={currentUser} onSummaryChange={handleSummaryChange} />
+        ) : (
+          <View style={styles.overviewList}>
+            {activeTab === 'Overview' && <>
+              <DetailRow icon="information-circle-outline" value={fields.description} />
+              <DetailRow icon="location-outline" value={fields.address} />
+              <DetailRow icon="time-outline" value={operatingStatus ? `${operatingStatus}  |  ${fields.openingHours}` : fields.openingHours} />
+              <DetailRow icon="globe-outline" value={fields.website} />
+            </>}
+            {activeTab === 'Menu' && <>
+              <DetailRow icon="restaurant-outline" value={fields.menu} />
+              <DetailRow icon="pricetag-outline" value={fields.prices} />
+            </>}
+            {activeTab === 'About' && <DetailRow icon="book-outline" value={fields.history} />}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -193,6 +206,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textSecondary,
     marginRight: 4,
+  },
+  reviewCountText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginLeft: 4,
+    textDecorationLine: 'underline',
   },
   audioBtn: {
     flexDirection: 'row',
