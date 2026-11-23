@@ -57,8 +57,9 @@ test('rain pushes indoor places up and outdoor places down', () => {
   const base = { now: wib(13) };
   const dry = recommend(records, prefs({ weights: { weather: 3 } }), { ...base, weather: describeWeather(3, 25, true, 0) });
   const wet = recommend(records, prefs({ weights: { weather: 3 } }), { ...base, weather: RAIN });
-  const rank = (result, id) => ids(result).indexOf(id);
-  assert.ok(rank(wet, 'P10') > rank(dry, 'P10'), 'outdoor gallery street drops in rain');
+  const score = (result, id) => result.items.find(item => item.poi.id === id).matchPercent;
+  assert.ok(score(wet, 'P10') < score(dry, 'P10'), 'outdoor gallery street scores lower in rain');
+  assert.ok(score(wet, 'P02') > score(dry, 'P02'), 'indoor cafe scores higher in rain');
   const topWet = wet.items.slice(0, 3).map(item => item.poi.environment);
   assert.ok(topWet.every(env => env === 'indoor'));
   assert.ok(wet.items[0].reasons.some(reason => /hujan/i.test(reason.text)));

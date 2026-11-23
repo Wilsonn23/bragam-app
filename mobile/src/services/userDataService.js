@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { authFetch } from './session';
 
 const RAW_API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
@@ -8,7 +9,8 @@ const RAW_API_URL =
 const API_BASE_URL = RAW_API_URL.replace(/\/+$/, '');
 
 async function apiRequest(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  // Per-user data: always send the session token so the server can verify ownership.
+  const response = await authFetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',

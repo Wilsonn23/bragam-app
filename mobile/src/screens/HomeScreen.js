@@ -18,6 +18,11 @@ import { ContextBanner, MatchBadge, ReasonChips } from '../components/Recommenda
 
 const HOME_RECOMMENDATION_COUNT = 5;
 
+function formatRecommendationDistance(meters) {
+  if (!Number.isFinite(meters)) return '';
+  return meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
+}
+
 function haversineMeters(a, b) {
   if (!a || !b) return 0;
   const R = 6371000;
@@ -478,6 +483,8 @@ export default function HomeScreen({
                     <View style={{ height: currentRecommendedItem.reasons.length ? 8 : 0 }} />
                     <PoiDetailFooter
                       name={currentRecommended.name}
+                      rating={currentRecommended.rating}
+                      distance={formatRecommendationDistance(currentRecommendedItem.distanceMeters)}
                       isSaved={isCurrentRecommendedSaved}
                       onCheckDetail={() => onOpenDetail?.(currentRecommended)}
                       onDirections={() => onOpenDirections?.(currentRecommended)}

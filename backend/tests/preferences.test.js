@@ -1,9 +1,15 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+
+process.env.AUTH_SECRET = 'test-secret-for-preferences-'.padEnd(48, 'x');
 const { createApp } = require('../server');
 const { toPoiResponse } = require('../poiResponse');
+const { signToken } = require('../auth');
 
 const userId = '11111111-1111-4111-8111-111111111111';
+const otherUserId = '22222222-2222-4222-8222-222222222222';
+const bearer = (id = userId) => ({ Authorization: `Bearer ${signToken(id)}` });
+const get = (url, id = userId) => fetch(url, { headers: bearer(id) });
 const DEFAULTS = {
   interests: [], visitTime: 'auto', environment: 'any', maxBudget: null, hideClosed: true,
   weights: { preference: 2, time: 2, location: 2, rating: 2, weather: 2 },
@@ -20,13 +26,13 @@ async function withServer(pool, run) {
   }
 }
 
-const put = (url, body) => fetch(url, {
-  method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+const put = (url, body, id = userId) => fetch(url, {
+  method: 'PUT', headers: { 'Content-Type': 'application/json', ...bearer(id) }, body: JSON.stringify(body),
 });
 
 test('preferences default when the user has not saved any', async () => {
   await withServer({ query: async () => ({ rows: [] }) }, async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/users/${userId}/preferences`);
+    const response = await get(`${baseUrl}/api/users/${userId}/preferences`);
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { preferences: DEFAULTS, updatedAt: null });
   });
@@ -39,7 +45,7 @@ test('stored preferences are merged over defaults and stale values are dropped',
       updated_at: '2026-11-23T00:00:00Z',
     }] }),
   }, async (baseUrl) => {
-    const body = await (await fetch(`${baseUrl}/api/users/${userId}/preferences`)).json();
+    const body = await (await get(`${baseUrl}/api/users/${userId}/preferences`)).json();
     assert.deepEqual(body.preferences.interests, ['kafe']);
     assert.equal(body.preferences.visitTime, 'malam');
     assert.equal(body.preferences.environment, 'any');
@@ -89,7 +95,7 @@ test('invalid preference values are rejected before touching the database', asyn
       const response = await put(url, body);
       assert.equal(response.status, 400, JSON.stringify(body));
     }
-    assert.equal((await put(`${baseUrl}/api/users/not-a-uuid/preferences`, {})).status, 400);
+    assert.equal((await put(`${baseUrl}/api/users/not-a-uuid/preferences`, {}, "not-a-uuid")).status, 400);
   });
   assert.equal(queried, false);
 });
@@ -111,4 +117,16 @@ test('POI responses carry the contextual fields used by recommendations', () => 
   assert.equal(poi.timeCategory, 'malam');
   assert.equal(poi.environment, 'outdoor');
   assert.equal(poi.avgDurationMinutes, 25);
+});
+
+test('preferences require a session belonging to that same user', async () => {
+  let queried = false;
+  await withServer({ query: async () => { queried = true; return { rows: [] }; } }, async (baseUrl) => {
+    const url = `${baseUrl}/api/users/${userId}/preferences`;
+    assert.equal((await fetch(url)).status, 401, 'no token');
+    assert.equal((await fetch(url, { headers: { Authorization: 'Bearer not.a.token' } })).status, 401, 'garbage token');
+    assert.equal((await get(url, otherUserId)).status, 403, 'someone else reading');
+    assert.equal((await put(url, { visitTime: 'pagi' }, otherUserId)).status, 403, 'someone else writing');
+  });
+  assert.equal(queried, false, 'rejected requests never reach the database');
 });

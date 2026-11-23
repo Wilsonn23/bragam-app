@@ -16,8 +16,6 @@
     "avgDurationMinutes": 45,
     "priceMin": 45000,
     "priceMax": 180000,
-    "rating": 4.6,
-    "reviewsCount": 1280,
     "audioGuideUrl": null,
     "notificationTitle": "Kuliner Legendaris Braga"
   },
@@ -38,8 +36,6 @@
     "avgDurationMinutes": 30,
     "priceMin": 20000,
     "priceMax": 50000,
-    "rating": 4.7,
-    "reviewsCount": 3450,
     "audioGuideUrl": null,
     "notificationTitle": "Kopi Kekinian Braga"
   },
@@ -60,8 +56,6 @@
     "avgDurationMinutes": 20,
     "priceMin": 18000,
     "priceMax": 40000,
-    "rating": 4.5,
-    "reviewsCount": 890,
     "audioGuideUrl": null,
     "notificationTitle": "Dessert Spot Braga"
   },
@@ -82,8 +76,6 @@
     "avgDurationMinutes": 15,
     "priceMin": 12000,
     "priceMax": 60000,
-    "rating": 4.4,
-    "reviewsCount": 420,
     "audioGuideUrl": null,
     "notificationTitle": "Bakery Klasik Braga"
   },
@@ -104,8 +96,6 @@
     "avgDurationMinutes": 25,
     "priceMin": 10000,
     "priceMax": 25000,
-    "rating": 4.6,
-    "reviewsCount": 2100,
     "audioGuideUrl": null,
     "notificationTitle": "Street Food Malam Braga"
   },
@@ -126,8 +116,6 @@
     "avgDurationMinutes": 45,
     "priceMin": 35000,
     "priceMax": 120000,
-    "rating": 4.3,
-    "reviewsCount": 510,
     "audioGuideUrl": null,
     "notificationTitle": "Restoran & Makanan Berat"
   },
@@ -148,8 +136,6 @@
     "avgDurationMinutes": 60,
     "priceMin": 50000,
     "priceMax": 250000,
-    "rating": 4.6,
-    "reviewsCount": 4200,
     "audioGuideUrl": null,
     "notificationTitle": "Restoran Bersejarah Braga"
   },
@@ -170,8 +156,6 @@
     "avgDurationMinutes": 20,
     "priceMin": 30000,
     "priceMax": 90000,
-    "rating": 4.5,
-    "reviewsCount": 1150,
     "audioGuideUrl": null,
     "notificationTitle": "Pusat Oleh-oleh Bandung"
   },
@@ -192,8 +176,6 @@
     "avgDurationMinutes": 30,
     "priceMin": 0,
     "priceMax": 20000,
-    "rating": 4.7,
-    "reviewsCount": 670,
     "audioGuideUrl": null,
     "notificationTitle": "Bioskop Bersejarah Pertama"
   },
@@ -214,8 +196,6 @@
     "avgDurationMinutes": 20,
     "priceMin": 50000,
     "priceMax": 1500000,
-    "rating": 4.8,
-    "reviewsCount": 1540,
     "audioGuideUrl": null,
     "notificationTitle": "Pameran Seni Ruang Terbuka"
   },
@@ -236,8 +216,6 @@
     "avgDurationMinutes": 60,
     "priceMin": 25000,
     "priceMax": 200000,
-    "rating": 4.4,
-    "reviewsCount": 5800,
     "audioGuideUrl": null,
     "notificationTitle": "Pusat Hiburan & Belanja"
   },
@@ -258,8 +236,6 @@
     "avgDurationMinutes": 90,
     "priceMin": 40000,
     "priceMax": 200000,
-    "rating": 4.5,
-    "reviewsCount": 760,
     "audioGuideUrl": null,
     "notificationTitle": "Hiburan Malam & Live Music"
   }

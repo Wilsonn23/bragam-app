@@ -32,6 +32,7 @@ import {
   deleteUserTripPlan,
 } from './src/services/userDataService';
 import { applyRatingOverrides } from './src/poi/ratings';
+import { setAuthToken, setUnauthorizedHandler } from './src/services/session';
 
 function MainApp() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -68,6 +69,16 @@ function MainApp() {
       .catch((err) => console.warn('Gagal memuat preferensi:', err?.message || err));
     return () => { isMounted = false; };
   }, [currentUser?.id]);
+
+  // Server rejected the session token (expired/invalid): return to login.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setPreferences(DEFAULT_PREFERENCES);
+      setCurrentUser(null);
+      Alert.alert('Sesi berakhir', 'Silakan login kembali untuk melanjutkan.');
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   // Sub-screens state: null | 'PoiDetail' | 'Navigation' | 'TripSummary' | 'TripSetting' | 'Bookmark'
   const [subScreen, setSubScreen] = useState(null);
@@ -301,7 +312,15 @@ function MainApp() {
     setSubScreen(preferencesReturn);
   };
 
+  // Keep the token in the session module only; screens receive the plain profile.
+  const handleLogin = (sessionUser) => {
+    const { token, ...profile } = sessionUser || {};
+    setAuthToken(token);
+    setCurrentUser(profile);
+  };
+
   const handleLogout = () => {
+    setAuthToken(null);
     setPreferences(DEFAULT_PREFERENCES);
     setCurrentUser(null);
   };
@@ -599,7 +618,7 @@ function MainApp() {
     subScreen === null && (activeTab === 'Home' || activeTab === 'Account');
 
   if (!currentUser) {
-    return <LoginScreen onLogin={setCurrentUser} />;
+    return <LoginScreen onLogin={handleLogin} />;
   }
 
   return (

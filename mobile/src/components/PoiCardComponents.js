@@ -18,8 +18,8 @@ export function WireframeImageBox({ width = '100%', height = 160, style }) {
 
 export function PoiDetailFooter({
   name = 'Braga Citywalk',
-  distance = '12km',
-  rating = '5.0',
+  distance = '',
+  rating = null,
   isSaved = false,
   onCheckDetail = undefined,
   onDirections = undefined,
@@ -42,7 +42,9 @@ export function PoiDetailFooter({
             {name}
           </Text>
           <View style={styles.ratingRow}>
-            <Text style={styles.ratingText}>{rating}</Text>
+            <Text style={styles.ratingText}>
+              {Number(rating) > 0 ? Number(rating).toFixed(1) : (rating || 'Belum ada rating')}
+            </Text>
             {Number(rating) > 0 && [1, 2, 3, 4, 5].map((star) => (
               <Ionicons
                 key={star}

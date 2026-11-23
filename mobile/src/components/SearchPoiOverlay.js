@@ -526,7 +526,7 @@ export default function SearchPoiOverlay({
     onClose?.();
     onSelectPoi?.({
       ...item,
-      rating: String(item.rating ?? '5.0'),
+      rating: item.rating ?? null,
       distance: item.distance || '12km',
     });
   };
@@ -577,7 +577,9 @@ export default function SearchPoiOverlay({
         <View style={styles.ratingRow}>
           <Ionicons name="star" size={13} color={COLORS.darkPurple} />
           <Text style={styles.ratingText}>
-            {item.rating} ({item.reviews_count ?? 0})
+            {Number(item.rating) > 0
+              ? `${item.rating} (${item.reviews_count ?? 0})`
+              : 'Belum ada rating'}
           </Text>
           <Text style={styles.dotSeparator}>•</Text>
           <Text style={styles.hoursText} numberOfLines={1}>

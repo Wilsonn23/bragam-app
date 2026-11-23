@@ -40,6 +40,29 @@ Semua request dengan body harus menggunakan:
 Content-Type: application/json
 ```
 
+## Autentikasi
+
+Token ditandatangani dengan secret yang hanya ada di server (tidak ikut ke APK). Tidak perlu
+diatur: saat pertama kali jalan, server membuat secret acak di `backend/.auth-secret`
+(di-gitignore) dan memakainya lagi setelah restart. Isi `AUTH_SECRET` (minimal 32 karakter)
+di `.env` hanya bila ingin menentukan sendiri, misalnya beberapa instance server harus
+berbagi sesi.
+
+Login atau daftar untuk mendapatkan token sesi (berlaku 7 hari):
+
+* `POST /api/auth/login` dengan `{ "email", "password" }` → `{ "user": {...}, "token": "..." }`
+* `POST /api/auth/register` dengan `{ "name", "email", "password" }` → `201 { "user": {...}, "token": "..." }`
+
+Endpoint bertanda 🔒 membutuhkan header:
+
+```http
+Authorization: Bearer <token>
+```
+
+Respons `401` berarti token tidak ada, tidak valid, atau kedaluwarsa (login ulang).
+Respons `403` berarti token valid tetapi data tersebut milik user lain. Di Swagger UI,
+klik **Authorize** lalu tempel token.
+
 ## Health check
 
 ### `GET /health`
@@ -221,14 +244,16 @@ Mengambil ringkasan dan daftar review sebuah POI:
 Trigger database memperbarui kolom `rating` dan `reviews_count` pada tabel `pois`
 setelah insert, update, atau delete rating.
 
-### `POST /api/pois/:poiId/ratings`
+### 🔒 `POST /api/pois/:poiId/ratings`
 
-Membuat atau memperbarui rating user.
+Membuat atau memperbarui rating milik user yang sedang login. Penulis rating diambil
+dari token, bukan dari body; `userId` di body opsional dan ditolak (`403`) bila berbeda.
 
 ```bash
 curl -X POST http://localhost:5000/api/pois/P01/ratings \
   -H "Content-Type: application/json" \
-  -d '{"userId":"3f2504e0-4f89-41d3-9a0c-0305e82c3301","rating":5,"review":"Tempatnya bagus"}'
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"rating":5,"review":"Tempatnya bagus"}'
 ```
 
 `rating` harus bilangan bulat 1–5. `review` opsional dan dibatasi 2000 karakter.
@@ -237,9 +262,9 @@ curl -X POST http://localhost:5000/api/pois/P01/ratings \
 
 Mengambil satu rating berdasarkan ID numerik.
 
-### `PATCH /api/ratings/:id`
+### 🔒 `PATCH /api/ratings/:id`
 
-Memperbarui `rating` dan/atau `review`.
+Memperbarui `rating` dan/atau `review`. Hanya pemilik rating (`403` untuk user lain).
 
 ```json
 {
@@ -248,9 +273,9 @@ Memperbarui `rating` dan/atau `review`.
 }
 ```
 
-### `DELETE /api/ratings/:id`
+### 🔒 `DELETE /api/ratings/:id`
 
-Menghapus satu rating. Response berhasil: `204 No Content`.
+Menghapus satu rating milik user yang sedang login. Response berhasil: `204 No Content`.
 
 ### `GET /api/users/:id/ratings`
 
@@ -261,12 +286,14 @@ Mengambil semua rating milik satu user berdasarkan UUID.
 Disimpan di tabel `user_preferences` (kolom JSONB, satu baris per user). Jalankan
 `migrations/20261123_user_preferences.sql` sebelum memakai endpoint ini.
 
-### `GET /api/users/:id/preferences`
+Kedua endpoint hanya bisa diakses oleh user itu sendiri (token harus milik `:id`).
+
+### 🔒 `GET /api/users/:id/preferences`
 
 Mengembalikan preferensi user. Bila user belum pernah menyimpan, nilai default dikembalikan
 dengan `updatedAt: null`.
 
-### `PUT /api/users/:id/preferences`
+### 🔒 `PUT /api/users/:id/preferences`
 
 Menyimpan seluruh preferensi. Field yang tidak dikirim memakai default; nilai di luar daftar
 berikut ditolak dengan `400`.
@@ -283,6 +310,7 @@ berikut ditolak dengan `400`.
 ```bash
 curl -X PUT http://localhost:5000/api/users/3f2504e0-4f89-41d3-9a0c-0305e82c3301/preferences \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"interests":["kafe","sejarah"],"visitTime":"auto","environment":"indoor","maxBudget":100000,"weights":{"weather":3}}'
 ```
 
@@ -295,6 +323,8 @@ Respons POI kini juga menyertakan `timeCategory`, `environment`, dan `avgDuratio
 | Status | Arti |
 |---:|---|
 | `400` | Input atau UUID tidak valid |
+| `401` | Token sesi tidak ada, tidak valid, atau kedaluwarsa |
+| `403` | Token valid, tetapi data milik user lain |
 | `404` | Data tidak ditemukan |
 | `409` | Email sudah terdaftar |
 | `500` | Query database gagal |

@@ -1,6 +1,15 @@
 const express = require('express');
+const { requireAuth } = require('../auth');
 
 const router = express.Router();
+
+/** 404 if the rating does not exist, 403 if it belongs to someone else, otherwise null. */
+async function ownershipError(db, ratingId, userId) {
+  const { rows } = await db.query('SELECT user_id FROM poi_ratings WHERE id = $1', [ratingId]);
+  if (!rows.length) return { status: 404, error: 'Rating tidak ditemukan.' };
+  if (rows[0].user_id !== userId) return { status: 403, error: 'Kamu hanya bisa mengubah rating milikmu sendiri.' };
+  return null;
+}
 
 router.get('/pois/:poiId/ratings', async (req, res, next) => {
   try {
@@ -54,9 +63,13 @@ router.get('/pois/:poiId/ratings', async (req, res, next) => {
   }
 });
 
-router.post('/pois/:poiId/ratings', async (req, res, next) => {
+router.post('/pois/:poiId/ratings', requireAuth, async (req, res, next) => {
   const rating = validateRating(req.body?.rating);
-  const userId = typeof req.body?.userId === 'string' ? req.body.userId : '';
+  // The author is always the signed-in user; a body userId is only accepted if it matches.
+  const userId = req.userId;
+  if (req.body?.userId !== undefined && req.body.userId !== userId) {
+    return res.status(403).json({ error: 'Kamu hanya bisa memberi rating atas nama akunmu sendiri.' });
+  }
   if (!isUuid(userId)) return res.status(400).json({ error: 'userId harus berupa UUID yang valid.' });
   if (!rating.valid) return res.status(400).json({ error: rating.error });
   const review = normalizeReview(req.body?.review);
@@ -100,7 +113,7 @@ router.get('/ratings/:id', async (req, res, next) => {
   }
 });
 
-router.patch('/ratings/:id', async (req, res, next) => {
+router.patch('/ratings/:id', requireAuth, async (req, res, next) => {
   const id = parseRatingId(req.params.id);
   if (!id) return res.status(400).json({ error: 'ID rating tidak valid.' });
   if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'Body request tidak valid.' });
@@ -120,12 +133,16 @@ router.patch('/ratings/:id', async (req, res, next) => {
   if (!fields.length) return res.status(400).json({ error: 'Tidak ada field yang diubah.' });
   fields.push('updated_at = CURRENT_TIMESTAMP');
   values.push(id);
+  values.push(req.userId);
 
   try {
+    const denied = await ownershipError(req.db, id, req.userId);
+    if (denied) return res.status(denied.status).json({ error: denied.error });
+    // user_id in the WHERE clause keeps the update owner-scoped even under a race.
     const { rows } = await req.db.query(`
       UPDATE poi_ratings
       SET ${fields.join(', ')}
-      WHERE id = $${values.length}
+      WHERE id = $${values.length - 1} AND user_id = $${values.length}
       RETURNING id, poi_id, user_id, rating, review, created_at, updated_at
     `, values);
     if (!rows.length) return res.status(404).json({ error: 'Rating tidak ditemukan.' });
@@ -135,12 +152,14 @@ router.patch('/ratings/:id', async (req, res, next) => {
   }
 });
 
-router.delete('/ratings/:id', async (req, res, next) => {
+router.delete('/ratings/:id', requireAuth, async (req, res, next) => {
   const id = parseRatingId(req.params.id);
   if (!id) return res.status(400).json({ error: 'ID rating tidak valid.' });
 
   try {
-    const result = await req.db.query('DELETE FROM poi_ratings WHERE id = $1', [id]);
+    const denied = await ownershipError(req.db, id, req.userId);
+    if (denied) return res.status(denied.status).json({ error: denied.error });
+    const result = await req.db.query('DELETE FROM poi_ratings WHERE id = $1 AND user_id = $2', [id, req.userId]);
     if (!result.rowCount) return res.status(404).json({ error: 'Rating tidak ditemukan.' });
     res.status(204).send();
   } catch (error) {

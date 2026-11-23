@@ -8,6 +8,7 @@ const poisRouter = require('./routes/pois');
 const ratingsRouter = require('./routes/ratings');
 const preferencesRouter = require('./routes/preferences');
 const openapiSpec = require('./openapi');
+const { authConfigured, secretSource } = require('./auth');
 require('dotenv').config();
 
 function createApp(pool) {
@@ -37,6 +38,10 @@ function createApp(pool) {
   app.use('/api/auth', authRouter);
 
   app.use((error, req, res, next) => {
+    if (error.code === 'AUTH_NOT_CONFIGURED') {
+      console.error('Auth is not configured: set AUTH_SECRET (32+ characters) in backend/.env.');
+      return res.status(500).json({ error: 'Autentikasi server belum dikonfigurasi.' });
+    }
     console.error('Database request failed:', error.code || 'unknown');
     res.status(500).json({ error: 'Database request failed.' });
   });
@@ -45,6 +50,15 @@ function createApp(pool) {
 }
 
 if (require.main === module) {
+  // Resolves (and on first run generates) the token secret before serving requests.
+  if (!authConfigured()) {
+    console.warn('WARNING: AUTH_SECRET is set but shorter than 32 characters. ' +
+      'Remove it to use an auto-generated secret, or set a longer one.');
+  } else {
+    console.log(secretSource() === 'env'
+      ? 'Auth: using AUTH_SECRET from environment'
+      : 'Auth: using auto-generated secret (backend/.auth-secret)');
+  }
   const pool = new Pool({ connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined });
   createApp(pool).listen(process.env.PORT || 5000, () => console.log('BRAGAm API server ready'));

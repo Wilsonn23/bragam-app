@@ -8,12 +8,46 @@ module.exports = {
   servers: [{ url: 'http://localhost:5000' }],
   tags: [
     { name: 'Health' },
+    { name: 'Auth' },
     { name: 'POI' },
     { name: 'Users' },
     { name: 'Ratings' },
     { name: 'Preferences' },
   ],
   paths: {
+    '/api/auth/login': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Login dan dapatkan token sesi (berlaku 7 hari)',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object', required: ['email', 'password'],
+            properties: { email: { type: 'string', format: 'email' }, password: { type: 'string', format: 'password' } },
+          } } },
+        },
+        responses: {
+          200: { description: 'Login berhasil', content: { 'application/json': { schema: { $ref: '#/components/schemas/Session' } } } },
+          400: { $ref: '#/components/responses/ValidationError' },
+          401: { description: 'Email atau password salah' },
+        },
+      },
+    },
+    '/api/auth/register': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Daftar akun baru dan langsung dapatkan token sesi',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateUser' } } },
+        },
+        responses: {
+          201: { description: 'Akun dibuat', content: { 'application/json': { schema: { $ref: '#/components/schemas/Session' } } } },
+          400: { $ref: '#/components/responses/ValidationError' },
+          409: { description: 'Email sudah terdaftar' },
+        },
+      },
+    },
     '/health': {
       get: {
         tags: ['Health'],
@@ -77,6 +111,7 @@ module.exports = {
       post: {
         tags: ['Ratings'],
         summary: 'Buat atau memperbarui rating user untuk POI',
+        security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
           content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateRating' } } },
@@ -98,12 +133,14 @@ module.exports = {
       patch: {
         tags: ['Ratings'],
         summary: 'Perbarui rating dan/atau review',
+        security: [{ bearerAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/UpdateRating' } } } },
         responses: { 200: { description: 'Rating diperbarui' }, 400: { $ref: '#/components/responses/ValidationError' }, 404: { description: 'Rating tidak ditemukan' } },
       },
       delete: {
         tags: ['Ratings'],
         summary: 'Hapus rating',
+        security: [{ bearerAuth: [] }],
         responses: { 204: { description: 'Rating dihapus' }, 404: { description: 'Rating tidak ditemukan' } },
       },
     },
@@ -120,6 +157,7 @@ module.exports = {
       get: {
         tags: ['Preferences'],
         summary: 'Ambil preferensi rekomendasi user (default bila belum disimpan)',
+        security: [{ bearerAuth: [] }],
         responses: {
           200: {
             description: 'Preferensi user',
@@ -131,6 +169,7 @@ module.exports = {
       put: {
         tags: ['Preferences'],
         summary: 'Simpan preferensi rekomendasi user (field yang tidak dikirim memakai default)',
+        security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
           content: { 'application/json': { schema: { $ref: '#/components/schemas/Preferences' } } },
@@ -221,6 +260,15 @@ module.exports = {
     },
   },
   components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'Token dari /api/auth/login atau /api/auth/register. ' +
+          '401 = token tidak ada/kedaluwarsa, 403 = data milik user lain.',
+      },
+    },
     parameters: {
       Latitude: {
         name: 'latitude',
@@ -315,6 +363,13 @@ module.exports = {
         properties: {
           preferences: { $ref: '#/components/schemas/Preferences' },
           updatedAt: { type: 'string', format: 'date-time', nullable: true },
+        },
+      },
+      Session: {
+        type: 'object',
+        properties: {
+          user: { $ref: '#/components/schemas/User' },
+          token: { type: 'string', description: 'Kirim sebagai header Authorization: Bearer <token>' },
         },
       },
       User: {

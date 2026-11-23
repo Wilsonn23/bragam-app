@@ -16,7 +16,8 @@ router.get('/pois', async (req, res, next) => {
       FROM pois
       ORDER BY id
     `);
-    const rows = await withImages(req.db, appendLocalTestPoi(result.rows, await loadLocalTestPoi(req.db)));
+    const rows = await withImages(req.db,
+      await withLiveRatings(req.db, appendLocalTestPoi(result.rows, await loadLocalTestPoi(req.db))));
     console.info(`[DB] /api/pois loaded ${rows.length} POI(s)`);
     res.json(rows.map(toPoiResponse));
   } catch (error) {
@@ -71,7 +72,8 @@ router.get('/pois/search', async (req, res, next) => {
       `SELECT * FROM pois ${whereClause} ORDER BY id ASC`,
       values
     );
-    const filtered = appendLocalTestPoi(result.rows, await loadLocalTestPoi(req.db)).filter((row) => {
+    const candidates = await withLiveRatings(req.db, appendLocalTestPoi(result.rows, await loadLocalTestPoi(req.db)));
+    const filtered = candidates.filter((row) => {
       if (row.id === 'TEST-LOCAL') {
         const text = `${row.name} ${row.category} ${row.description}`.toLowerCase();
         if (q && !text.includes(q.toLowerCase())) return false;
@@ -85,8 +87,9 @@ router.get('/pois/search', async (req, res, next) => {
           !String(row.environment).toLowerCase().includes(environment)) {
         return false;
       }
-      if (!Number.isNaN(minRating) && minRating > 0 && row.rating != null &&
-          Number(row.rating) < minRating) {
+      // A minimum-rating filter excludes places nobody has rated yet.
+      if (!Number.isNaN(minRating) && minRating > 0 &&
+          (row.rating == null || Number(row.rating) < minRating)) {
         return false;
       }
       return true;
@@ -102,7 +105,7 @@ router.get('/pois/search', async (req, res, next) => {
       data: rowsWithImages.map((row) => ({
         ...toPoiResponse(row),
         description: row.description || '',
-        rating: row.rating != null ? Number(row.rating).toFixed(1) : '5.0',
+        rating: row.rating != null ? Number(row.rating).toFixed(1) : null,
         reviews_count: row.reviews_count ?? 0,
         opening_hours: row.opening_hours || '10.00 am - 10.00 pm',
         environment: row.environment || '',
@@ -159,7 +162,7 @@ router.get('/pois/nearby', async (req, res, next) => {
       }
     }
     nearby.sort((a, b) => Number(a.distance_meters) - Number(b.distance_meters));
-    const rows = await withImages(req.db, nearby.slice(0, 1));
+    const rows = await withImages(req.db, await withLiveRatings(req.db, nearby.slice(0, 1)));
     console.info(
       `[DB] /api/pois/nearby lat=${latitude} lng=${longitude} ` +
       `maxRadius=${maxRadius} found=${rows.length}`
@@ -201,7 +204,7 @@ router.get('/pois/:id', async (req, res, next) => {
   try {
     const testPoi = await loadLocalTestPoi(req.db);
     if (testPoi?.id === req.params.id) {
-      const [withGallery] = await withImages(req.db, [testPoi]);
+      const [withGallery] = await withImages(req.db, await withLiveRatings(req.db, [testPoi]));
       return res.json(toPoiResponse(withGallery));
     }
     const result = await req.db.query(`
@@ -219,7 +222,7 @@ router.get('/pois/:id', async (req, res, next) => {
       return res.status(404).json({ error: 'POI tidak ditemukan.' });
     }
 
-    const [row] = await withImages(req.db, result.rows);
+    const [row] = await withImages(req.db, await withLiveRatings(req.db, result.rows));
     res.json(toPoiResponse(row));
   } catch (error) {
     next(error);
@@ -231,6 +234,33 @@ function toPoiResponse(row) {
     ...sharedPoiResponse(row),
     ...(row.is_local_test ? { isLocalTest: true, sourcePoiId: row.source_poi_id } : {}),
   };
+}
+
+/**
+ * Rating and review count always come from real user ratings in poi_ratings.
+ * The pois.rating / reviews_count columns still hold the PB03 CSV seed values for
+ * POIs nobody has rated, so they are never exposed. Unrated POIs get rating null, 0 reviews.
+ */
+async function withLiveRatings(db, rows) {
+  if (!rows.length) return rows;
+  // An in-memory local GPS clone shows its source POI's ratings, like its gallery.
+  const ratingPoiId = (row) => row.source_poi_id || row.id;
+  const poiIds = [...new Set(rows.map(ratingPoiId))];
+  const { rows: stats } = await db.query(`
+    SELECT poi_id, ROUND(AVG(rating)::NUMERIC, 1) AS average_rating, COUNT(*) AS review_count
+    FROM poi_ratings
+    WHERE poi_id = ANY($1::varchar[])
+    GROUP BY poi_id
+  `, [poiIds]);
+  const byPoi = new Map(stats.map((stat) => [stat.poi_id, stat]));
+  return rows.map((row) => {
+    const stat = byPoi.get(ratingPoiId(row));
+    return {
+      ...row,
+      rating: stat ? Number(stat.average_rating) : null,
+      reviews_count: stat ? Number(stat.review_count) : 0,
+    };
+  });
 }
 
 async function withImages(db, rows) {
