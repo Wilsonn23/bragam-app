@@ -14,6 +14,11 @@ import PoiDetailScreen from './src/screens/PoiDetailScreen';
 import NavigationScreen from './src/screens/NavigationScreen';
 import TripRouteSummaryScreen from './src/screens/TripRouteSummaryScreen';
 import BookmarkScreen from './src/screens/BookmarkScreen';
+import RecommendationScreen from './src/screens/RecommendationScreen';
+import PreferencesScreen from './src/screens/PreferencesScreen';
+import { DEFAULT_PREFERENCES, normalizePreferences } from './src/recommendation/preferences';
+import { useRecommendationContext, useRecommendations } from './src/recommendation/useRecommendations';
+import { fetchUserPreferences, saveUserPreferences } from './src/services/preferencesApi';
 import { COLORS } from './src/components/theme';
 import { usePois } from './src/poi/PoiProvider';
 import { useAppActive, useForegroundLocation } from './src/hooks/useForegroundLocation';
@@ -46,6 +51,23 @@ function MainApp() {
   const gps = useForegroundLocation(active);
   const { event, dismiss } = usePoiTriggers(pois, gps.sample, active);
   const [activeTab, setActiveTab] = useState('Home');
+
+  // Rekomendasi kontekstual: preferensi user + waktu + lokasi + rating + cuaca
+  const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
+  const [preferencesReturn, setPreferencesReturn] = useState(null);
+  const [preferencesKey, setPreferencesKey] = useState(0);
+  const recommendationContext = useRecommendationContext();
+  const recommendations = useRecommendations(displayPois, preferences, gps.sample, recommendationContext);
+
+  useEffect(() => {
+    const userId = currentUser?.id;
+    if (!userId) return;
+    let isMounted = true;
+    fetchUserPreferences(userId)
+      .then((loaded) => { if (isMounted) setPreferences(loaded); })
+      .catch((err) => console.warn('Gagal memuat preferensi:', err?.message || err));
+    return () => { isMounted = false; };
+  }, [currentUser?.id]);
 
   // Sub-screens state: null | 'PoiDetail' | 'Navigation' | 'TripSummary' | 'TripSetting' | 'Bookmark'
   const [subScreen, setSubScreen] = useState(null);
@@ -254,6 +276,36 @@ function MainApp() {
     setSubScreen('Bookmark');
   };
 
+  const handleOpenRecommendations = () => {
+    setSubScreen('Recommendations');
+  };
+
+  const handleOpenPreferences = () => {
+    setPreferencesReturn(subScreen);
+    setPreferencesKey((key) => key + 1);
+    setSubScreen('Preferences');
+  };
+
+  const handleSavePreferences = async (draft) => {
+    const next = normalizePreferences(draft);
+    try {
+      setPreferences(await saveUserPreferences(currentUser.id, next));
+    } catch (err) {
+      // Still apply for this session so the user sees the effect; warn that it is not synced.
+      setPreferences(next);
+      Alert.alert(
+        'Preferensi diterapkan sementara',
+        `Belum tersimpan ke server: ${err?.message || 'koneksi gagal'}. Pengaturan berlaku sampai kamu keluar.`
+      );
+    }
+    setSubScreen(preferencesReturn);
+  };
+
+  const handleLogout = () => {
+    setPreferences(DEFAULT_PREFERENCES);
+    setCurrentUser(null);
+  };
+
   // Tombol "Pakai" pada card Trip -> Mulai navigasi berantai (GPS -> POI 1 -> POI 2 -> ...)
   const handleUseTrip = (trip) => {
     if (!trip?.stops || trip.stops.length === 0) {
@@ -410,6 +462,34 @@ function MainApp() {
       );
     }
 
+    if (subScreen === 'Recommendations') {
+      return (
+        <RecommendationScreen
+          recommendations={recommendations}
+          preferences={preferences}
+          weatherStatus={recommendationContext.weatherStatus}
+          onRefreshWeather={recommendationContext.refreshWeather}
+          onBack={() => setSubScreen(null)}
+          onOpenDetail={handleOpenDetail}
+          onOpenPreferences={handleOpenPreferences}
+        />
+      );
+    }
+
+    if (subScreen === 'Preferences') {
+      return (
+        <PreferencesScreen
+          key={preferencesKey}
+          preferences={preferences}
+          pois={displayPois}
+          userCoord={gps.sample}
+          context={recommendationContext}
+          onBack={() => setSubScreen(preferencesReturn)}
+          onSave={handleSavePreferences}
+        />
+      );
+    }
+
     if (subScreen === 'TripSummary') {
       return (
         <TripRouteSummaryScreen
@@ -435,6 +515,11 @@ function MainApp() {
             onUseTrip={handleUseTrip}
             onEditTrip={handleEditTrip}
             onCreateTrip={handleCreateTrip}
+            recommendations={recommendations}
+            weatherStatus={recommendationContext.weatherStatus}
+            onRefreshWeather={recommendationContext.refreshWeather}
+            onOpenRecommendations={handleOpenRecommendations}
+            onOpenPreferences={handleOpenPreferences}
           />
         );
       case 'Explore':
@@ -471,7 +556,8 @@ function MainApp() {
         return (
           <AccountScreen
             user={currentUser}
-            onLogout={() => setCurrentUser(null)}
+            onLogout={handleLogout}
+            onOpenPreferences={handleOpenPreferences}
           />
         );
       default:
@@ -489,6 +575,11 @@ function MainApp() {
             onUseTrip={handleUseTrip}
             onEditTrip={handleEditTrip}
             onCreateTrip={handleCreateTrip}
+            recommendations={recommendations}
+            weatherStatus={recommendationContext.weatherStatus}
+            onRefreshWeather={recommendationContext.refreshWeather}
+            onOpenRecommendations={handleOpenRecommendations}
+            onOpenPreferences={handleOpenPreferences}
           />
         );
     }
@@ -502,7 +593,8 @@ function MainApp() {
     else setGeofencePoi(null);
   };
 
-  const showBottomNav = subScreen !== 'PoiDetail' && subScreen !== 'TripSetting';
+  const showBottomNav =
+    subScreen !== 'PoiDetail' && subScreen !== 'TripSetting' && subScreen !== 'Preferences';
   const isLightStatusBar =
     subScreen === null && (activeTab === 'Home' || activeTab === 'Account');
 

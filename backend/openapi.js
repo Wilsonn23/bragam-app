@@ -11,6 +11,7 @@ module.exports = {
     { name: 'POI' },
     { name: 'Users' },
     { name: 'Ratings' },
+    { name: 'Preferences' },
   ],
   paths: {
     '/health': {
@@ -112,6 +113,36 @@ module.exports = {
         tags: ['Ratings'],
         summary: 'Ambil semua rating milik user',
         responses: { 200: { description: 'Daftar rating user' }, 400: { $ref: '#/components/responses/ValidationError' } },
+      },
+    },
+    '/api/users/{id}/preferences': {
+      parameters: [{ $ref: '#/components/parameters/UserId' }],
+      get: {
+        tags: ['Preferences'],
+        summary: 'Ambil preferensi rekomendasi user (default bila belum disimpan)',
+        responses: {
+          200: {
+            description: 'Preferensi user',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/PreferencesResponse' } } },
+          },
+          400: { $ref: '#/components/responses/ValidationError' },
+        },
+      },
+      put: {
+        tags: ['Preferences'],
+        summary: 'Simpan preferensi rekomendasi user (field yang tidak dikirim memakai default)',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/Preferences' } } },
+        },
+        responses: {
+          200: {
+            description: 'Preferensi tersimpan',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/PreferencesResponse' } } },
+          },
+          400: { $ref: '#/components/responses/ValidationError' },
+          404: { description: 'User tidak ditemukan' },
+        },
       },
     },
     '/api/users': {
@@ -249,6 +280,41 @@ module.exports = {
           notificationTitle: { type: 'string' },
           audioGuideUrl: { type: 'string', nullable: true },
           distanceMeters: { type: 'number', nullable: true },
+          timeCategory: { type: 'string', example: 'siang, malam' },
+          environment: { type: 'string', enum: ['indoor', 'outdoor', 'both'] },
+          avgDurationMinutes: { type: 'number', example: 45 },
+        },
+      },
+      Preferences: {
+        type: 'object',
+        properties: {
+          interests: {
+            type: 'array',
+            items: { type: 'string', enum: ['kuliner', 'kafe', 'oleh', 'sejarah', 'hiburan', 'malam'] },
+            description: 'Kosong berarti semua kategori',
+          },
+          visitTime: { type: 'string', enum: ['auto', 'pagi', 'siang', 'malam'], default: 'auto' },
+          environment: { type: 'string', enum: ['any', 'indoor', 'outdoor'], default: 'any' },
+          maxBudget: { type: 'integer', nullable: true, enum: [null, 50000, 100000, 200000] },
+          hideClosed: { type: 'boolean', default: true },
+          weights: {
+            type: 'object',
+            description: 'Bobot faktor 0 (abaikan) sampai 3 (tinggi); minimal satu > 0',
+            properties: {
+              preference: { type: 'integer', minimum: 0, maximum: 3, default: 2 },
+              time: { type: 'integer', minimum: 0, maximum: 3, default: 2 },
+              location: { type: 'integer', minimum: 0, maximum: 3, default: 2 },
+              rating: { type: 'integer', minimum: 0, maximum: 3, default: 2 },
+              weather: { type: 'integer', minimum: 0, maximum: 3, default: 2 },
+            },
+          },
+        },
+      },
+      PreferencesResponse: {
+        type: 'object',
+        properties: {
+          preferences: { $ref: '#/components/schemas/Preferences' },
+          updatedAt: { type: 'string', format: 'date-time', nullable: true },
         },
       },
       User: {

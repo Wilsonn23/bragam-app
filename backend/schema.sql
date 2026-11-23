@@ -134,3 +134,11 @@ FOR EACH ROW
 EXECUTE FUNCTION set_poi_location();
 
 CREATE INDEX IF NOT EXISTS idx_pois_location ON pois USING GIST (location);
+
+CREATE TABLE IF NOT EXISTS public.user_preferences (
+    user_id UUID PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
+    preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;

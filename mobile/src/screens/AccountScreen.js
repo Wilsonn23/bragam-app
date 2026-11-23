@@ -19,7 +19,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 220;
 const MAX_SHEET_HEIGHT = Math.min(SCREEN_HEIGHT * 0.4, 300);
 
-export default function AccountScreen({ user, onLogout }) {
+export default function AccountScreen({ user, onLogout, onOpenPreferences = undefined }) {
   const insets = useSafeAreaInsets();
   const topInset =
     insets.top > 0
@@ -138,6 +138,16 @@ export default function AccountScreen({ user, onLogout }) {
         <View {...panResponder.panHandlers} style={styles.dragHandleHitArea}>
           <View style={styles.dragHandle} />
         </View>
+
+        {/* Menu: Preferensi Rekomendasi */}
+        <TouchableOpacity activeOpacity={0.75} style={styles.menuRow} onPress={onOpenPreferences}
+          accessibilityRole="button">
+          <View style={styles.menuLeft}>
+            <Ionicons name="options" size={24} color={COLORS.primaryPurple} />
+            <Text style={styles.menuLabel}>Preferensi Rekomendasi</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={COLORS.darkPurple} />
+        </TouchableOpacity>
 
         {/* Menu Item 1: Ganti Password */}
         <TouchableOpacity activeOpacity={0.75} style={styles.menuRow}>

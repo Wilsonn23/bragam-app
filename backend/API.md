@@ -256,6 +256,40 @@ Menghapus satu rating. Response berhasil: `204 No Content`.
 
 Mengambil semua rating milik satu user berdasarkan UUID.
 
+## Preferensi rekomendasi
+
+Disimpan di tabel `user_preferences` (kolom JSONB, satu baris per user). Jalankan
+`migrations/20261123_user_preferences.sql` sebelum memakai endpoint ini.
+
+### `GET /api/users/:id/preferences`
+
+Mengembalikan preferensi user. Bila user belum pernah menyimpan, nilai default dikembalikan
+dengan `updatedAt: null`.
+
+### `PUT /api/users/:id/preferences`
+
+Menyimpan seluruh preferensi. Field yang tidak dikirim memakai default; nilai di luar daftar
+berikut ditolak dengan `400`.
+
+| Field | Nilai | Default |
+|---|---|---|
+| `interests` | array dari `kuliner`, `kafe`, `oleh`, `sejarah`, `hiburan`, `malam` (kosong = semua) | `[]` |
+| `visitTime` | `auto` (ikuti jam sekarang), `pagi`, `siang`, `malam` | `auto` |
+| `environment` | `any`, `indoor`, `outdoor` | `any` |
+| `maxBudget` | `null`, `50000`, `100000`, `200000` (IDR per orang) | `null` |
+| `hideClosed` | boolean | `true` |
+| `weights` | objek `preference`, `time`, `location`, `rating`, `weather` bernilai 0–3; minimal satu > 0 | semua `2` |
+
+```bash
+curl -X PUT http://localhost:5000/api/users/3f2504e0-4f89-41d3-9a0c-0305e82c3301/preferences \
+  -H "Content-Type: application/json" \
+  -d '{"interests":["kafe","sejarah"],"visitTime":"auto","environment":"indoor","maxBudget":100000,"weights":{"weather":3}}'
+```
+
+Skor rekomendasi dihitung di aplikasi mobile (`mobile/src/recommendation/engine.js`) dari
+preferensi ini, waktu kunjungan, lokasi GPS, rating, dan cuaca terkini (Open-Meteo).
+Respons POI kini juga menyertakan `timeCategory`, `environment`, dan `avgDurationMinutes`.
+
 ## Status error umum
 
 | Status | Arti |

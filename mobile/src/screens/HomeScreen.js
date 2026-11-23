@@ -14,6 +14,9 @@ import { COLORS, RADIUS } from '../components/theme';
 import { PoiDetailFooter } from '../components/PoiCardComponents';
 import { PoiFirstImage } from '../components/PoiImageGallery';
 import { BRAGA_POIS } from '../constants/bragaMapData';
+import { ContextBanner, MatchBadge, ReasonChips } from '../components/RecommendationParts';
+
+const HOME_RECOMMENDATION_COUNT = 5;
 
 function haversineMeters(a, b) {
   if (!a || !b) return 0;
@@ -75,16 +78,6 @@ function resolveUserDisplayName(user) {
   return String(rawName || 'User').trim();
 }
 
-function pickRandomPois(sourceList, count = 3) {
-  const pool = Array.isArray(sourceList) ? [...sourceList] : [];
-  if (pool.length <= count) return pool;
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  return pool.slice(0, count);
-}
-
 export default function HomeScreen({
   user = null,
   pois = [],
@@ -98,6 +91,11 @@ export default function HomeScreen({
   onUseTrip,
   onEditTrip,
   onCreateTrip,
+  recommendations = null,
+  weatherStatus = 'loading',
+  onRefreshWeather = undefined,
+  onOpenRecommendations = undefined,
+  onOpenPreferences = undefined,
 }) {
   const insets = useSafeAreaInsets();
   const topInset =
@@ -129,20 +127,17 @@ export default function HomeScreen({
   const activeTrip = tripPlans[tripIndex] || null;
   const activeTripStops = activeTrip?.stops || [];
 
-  // Pilih 3 POI acak dari dataset Braga
+  // Rekomendasi kontekstual (preferensi, waktu, lokasi, rating, cuaca) dari engine
   const [recommendedIndex, setRecommendedIndex] = useState(0);
-  const randomRecommendedPois = useMemo(
-    () => pickRandomPois(datasetPois, 3),
-    [datasetPois]
+  const recommendedItems = useMemo(
+    () => (recommendations?.items || []).slice(0, HOME_RECOMMENDATION_COUNT),
+    [recommendations]
   );
-
-  useEffect(() => {
-    if (recommendedIndex >= randomRecommendedPois.length) {
-      setRecommendedIndex(0);
-    }
-  }, [randomRecommendedPois.length, recommendedIndex]);
-
-  const currentRecommended = randomRecommendedPois[recommendedIndex] || null;
+  const activeRecommendedIndex = recommendedItems.length
+    ? recommendedIndex % recommendedItems.length
+    : 0;
+  const currentRecommendedItem = recommendedItems[activeRecommendedIndex] || null;
+  const currentRecommended = currentRecommendedItem?.poi || null;
 
   const isCurrentRecommendedSaved = useMemo(() => {
     if (!currentRecommended) return false;
@@ -165,16 +160,15 @@ export default function HomeScreen({
   };
 
   const handlePrevRecommended = () => {
-    if (randomRecommendedPois.length <= 1) return;
+    if (recommendedItems.length <= 1) return;
     setRecommendedIndex(
-      (prev) =>
-        (prev - 1 + randomRecommendedPois.length) % randomRecommendedPois.length
+      (activeRecommendedIndex - 1 + recommendedItems.length) % recommendedItems.length
     );
   };
 
   const handleNextRecommended = () => {
-    if (randomRecommendedPois.length <= 1) return;
-    setRecommendedIndex((prev) => (prev + 1) % randomRecommendedPois.length);
+    if (recommendedItems.length <= 1) return;
+    setRecommendedIndex((activeRecommendedIndex + 1) % recommendedItems.length);
   };
 
   return (
@@ -421,15 +415,35 @@ export default function HomeScreen({
             <View style={styles.orLine} />
           </View>
 
-          {/* Section 2: Rekomendasi Destinasi Braga (3 POI Acak) */}
+          {/* Section 2: Rekomendasi kontekstual */}
           <Text style={styles.sectionHeading}>
-            Coba Kunjungi Rekomendasi Destinasi Braga!
+            Rekomendasi Untukmu di Braga
           </Text>
+
+          {recommendations && (
+            <View style={styles.recoContextWrap}>
+              <ContextBanner
+                context={recommendations.context}
+                weatherStatus={weatherStatus}
+                onRefreshWeather={onRefreshWeather}
+              />
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={onOpenPreferences}
+                style={styles.recoPrefBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Atur preferensi rekomendasi"
+              >
+                <Ionicons name="options-outline" size={16} color={COLORS.darkPurple} />
+                <Text style={styles.recoPrefText}>Atur preferensi</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {currentRecommended ? (
             <>
               <View style={styles.carouselWrapper}>
-                {randomRecommendedPois.length > 1 && (
+                {recommendedItems.length > 1 && (
                   <TouchableOpacity
                     activeOpacity={0.8}
                     onPress={handlePrevRecommended}
@@ -445,12 +459,23 @@ export default function HomeScreen({
                 )}
 
                 <View style={styles.recommendedCard}>
-                  <PoiFirstImage
-                    poi={currentRecommended}
-                    style={styles.recommendationImage}
-                  />
+                  <View>
+                    <PoiFirstImage
+                      poi={currentRecommended}
+                      style={styles.recommendationImage}
+                    />
+                    <View style={styles.recoRankPill}>
+                      <Text style={styles.recoRankText}>#{activeRecommendedIndex + 1}</Text>
+                    </View>
+                    <MatchBadge
+                      percent={currentRecommendedItem.matchPercent}
+                      style={styles.recoMatchBadge}
+                    />
+                  </View>
 
                   <View style={styles.recommendedBody}>
+                    <ReasonChips reasons={currentRecommendedItem.reasons} />
+                    <View style={{ height: currentRecommendedItem.reasons.length ? 8 : 0 }} />
                     <PoiDetailFooter
                       name={currentRecommended.name}
                       isSaved={isCurrentRecommendedSaved}
@@ -464,7 +489,7 @@ export default function HomeScreen({
                   </View>
                 </View>
 
-                {randomRecommendedPois.length > 1 && (
+                {recommendedItems.length > 1 && (
                   <TouchableOpacity
                     activeOpacity={0.8}
                     onPress={handleNextRecommended}
@@ -480,20 +505,40 @@ export default function HomeScreen({
                 )}
               </View>
 
-              {/* Bottom Carousel Dots (3 POI Acak) */}
+              {/* Bottom Carousel Dots (Top rekomendasi) */}
               <View style={[styles.dotsRow, { marginTop: 12 }]}>
-                {randomRecommendedPois.map((item, idx) => (
+                {recommendedItems.map((item, idx) => (
                   <TouchableOpacity
-                    key={item.id || idx}
+                    key={item.poi.id || idx}
                     onPress={() => setRecommendedIndex(idx)}
                     style={[
                       styles.dot,
-                      idx === recommendedIndex && styles.dotActive,
+                      idx === activeRecommendedIndex && styles.dotActive,
                     ]}
                   />
                 ))}
               </View>
+
+              {onOpenRecommendations && (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={onOpenRecommendations}
+                  style={styles.recoSeeAllBtn}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.recoSeeAllText}>
+                    Lihat semua {recommendations?.items.length || ''} rekomendasi
+                  </Text>
+                  <Ionicons name="arrow-forward" size={16} color={COLORS.white} />
+                </TouchableOpacity>
+              )}
             </>
+          ) : recommendations && recommendations.context.hiddenClosed > 0 ? (
+            <View style={styles.recoEmpty}>
+              <Text style={styles.recoEmptyText}>
+                Tempat yang cocok sedang tutup. Coba ubah waktu kunjungan di preferensi.
+              </Text>
+            </View>
           ) : (
             <Text style={styles.sectionHeading}>
               Buka Explore untuk memuat atau mencoba ulang destinasi.
@@ -821,5 +866,71 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 12,
+  },
+  recoContextWrap: {
+    marginBottom: 14,
+  },
+  recoPrefBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: 5,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.pill,
+    backgroundColor: COLORS.lavenderTint,
+  },
+  recoPrefText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.darkPurple,
+  },
+  recoRankPill: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  recoRankText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.darkPurple,
+  },
+  recoMatchBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+  },
+  recoSeeAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 14,
+    alignSelf: 'center',
+    backgroundColor: COLORS.darkPurple,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  recoSeeAllText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  recoEmpty: {
+    backgroundColor: COLORS.lavenderTint,
+    borderRadius: RADIUS.md,
+    padding: 14,
+  },
+  recoEmptyText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

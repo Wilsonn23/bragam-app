@@ -9,6 +9,7 @@ router.get('/pois', async (req, res, next) => {
     const result = await req.db.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
              description, address, history, opening_hours, menu_highlights,
+             time_category, environment, avg_duration_minutes,
              price_min, price_max, rating, reviews_count,
              image_url, notification_title, notification_body,
              cooldown_seconds, audio_guide_url
@@ -133,6 +134,7 @@ router.get('/pois/nearby', async (req, res, next) => {
     const result = await req.db.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
              description, address, history, opening_hours, menu_highlights,
+             time_category, environment, avg_duration_minutes,
              price_min, price_max, rating, reviews_count,
              image_url, notification_title, notification_body, cooldown_seconds, audio_guide_url,
              ST_Distance(
@@ -205,6 +207,7 @@ router.get('/pois/:id', async (req, res, next) => {
     const result = await req.db.query(`
       SELECT id, name, category, latitude, longitude, radius_meters,
              description, address, history, opening_hours, menu_highlights,
+             time_category, environment, avg_duration_minutes,
              price_min, price_max, rating, reviews_count,
              image_url, notification_title, notification_body, cooldown_seconds, audio_guide_url
       FROM pois
