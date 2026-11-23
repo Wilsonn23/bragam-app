@@ -85,6 +85,20 @@ CREATE TABLE IF NOT EXISTS poi_images (
 CREATE INDEX IF NOT EXISTS idx_poi_images_poi_order
 ON poi_images (poi_id, sort_order, id);
 
+CREATE TABLE IF NOT EXISTS poi_ratings (
+    id BIGSERIAL PRIMARY KEY,
+    poi_id VARCHAR(10) NOT NULL REFERENCES pois(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    review TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (poi_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_poi_ratings_poi_rating
+ON poi_ratings (poi_id, rating);
+
 INSERT INTO poi_images (poi_id, image_url, sort_order)
 SELECT p.id, p.image_url, 0
 FROM pois p

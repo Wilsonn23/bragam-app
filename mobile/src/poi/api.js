@@ -49,4 +49,63 @@ async function registerUser(name, email, password) {
   return data;
 }
 
-module.exports = { fetchPois, fetchPoiImages, loginUser, registerUser };
+async function fetchPoiRatings(poiId) {
+  const response = await fetch(`${API_BASE_URL}/api/pois/${encodeURIComponent(poiId)}/ratings`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Gagal mengambil rating POI.');
+  return data;
+}
+
+async function submitPoiRating(poiId, userId, rating, review) {
+  const response = await fetch(`${API_BASE_URL}/api/pois/${encodeURIComponent(poiId)}/ratings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, rating, review }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Gagal menyimpan rating.');
+  return data;
+}
+
+async function updatePoiRating(ratingId, rating, review) {
+  const body = {};
+  if (rating !== undefined) body.rating = rating;
+  if (review !== undefined) body.review = review;
+  const response = await fetch(`${API_BASE_URL}/api/ratings/${encodeURIComponent(ratingId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Gagal memperbarui rating.');
+  return data;
+}
+
+async function deletePoiRating(ratingId) {
+  const response = await fetch(`${API_BASE_URL}/api/ratings/${encodeURIComponent(ratingId)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || 'Gagal menghapus rating.');
+  }
+}
+
+async function fetchUserRatings(userId) {
+  const response = await fetch(`${API_BASE_URL}/api/users/${encodeURIComponent(userId)}/ratings`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Gagal mengambil rating user.');
+  return data;
+}
+
+module.exports = {
+  fetchPois,
+  fetchPoiImages,
+  loginUser,
+  registerUser,
+  fetchPoiRatings,
+  submitPoiRating,
+  updatePoiRating,
+  deletePoiRating,
+  fetchUserRatings,
+};
