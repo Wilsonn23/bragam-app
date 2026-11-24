@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const { createSession, revokeSession } = require('../session');
 
 const router = express.Router();
 
@@ -29,10 +30,16 @@ router.post('/login', async (req, res, next) => {
     }
 
     const { password_hash: _passwordHash, ...safeUser } = user;
-    res.json({ user: safeUser });
+    res.json({ user: safeUser, token: createSession(user.id) });
   } catch (error) {
     next(error);
   }
+});
+
+router.post('/logout', (req, res) => {
+  const token = /^Bearer (\S+)$/.exec(req.get('Authorization') || '')?.[1];
+  revokeSession(token);
+  res.status(204).end();
 });
 
 function normalizeEmail(value) {

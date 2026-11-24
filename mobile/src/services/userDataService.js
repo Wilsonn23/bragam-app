@@ -1,20 +1,31 @@
-import { Platform } from 'react-native';
+import { API_BASE_URL } from '../config/api';
+import { getToken, clearSession } from './session';
 
-const RAW_API_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
-  process.env.EXPO_PUBLIC_BACKEND_URL ||
-  (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000');
-
-const API_BASE_URL = RAW_API_URL.replace(/\/+$/, '');
+export function logoutUser() {
+  const token = getToken();
+  clearSession();
+  if (token) fetch(`${API_BASE_URL}/api/auth/logout`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}` },
+  }).catch(() => {});
+}
 
 async function apiRequest(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+        ...(options.headers || {}),
+      },
+    });
+  } catch (_) {
+    throw new Error('Tidak dapat menghubungi backend. Periksa koneksi dan alamat API.');
+  } finally { clearTimeout(timer); }
 
   if (!response.ok) {
     let errMsg = `HTTP ${response.status}`;

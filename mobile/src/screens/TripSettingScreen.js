@@ -586,6 +586,7 @@ export default function TripSettingScreen({
   const [title, setTitle] = useState(
     initialPlan?.title || `Trip Plan ${existingCount + 1}`
   );
+  const savingPlan = useRef(false);
   const [mode, setMode] = useState('auto'); // 'auto' | 'manual'
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
@@ -979,7 +980,8 @@ export default function TripSettingScreen({
     setEditingStopIndex(null);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (savingPlan.current) return;
     const cleanTitle = title.trim() || `Trip Plan ${existingCount + 1}`;
     if (stops.length === 0) {
       Alert.alert(
@@ -989,11 +991,14 @@ export default function TripSettingScreen({
       return;
     }
 
-    onSavePlan?.({
-      id: initialPlan?.id || `plan-${Date.now()}`,
-      title: cleanTitle,
-      stops,
-    });
+    savingPlan.current = true;
+    try {
+      await onSavePlan?.({
+        id: initialPlan?.id || `plan-${Date.now()}`,
+        title: cleanTitle,
+        stops,
+      });
+    } finally { savingPlan.current = false; }
   };
 
   const hasActiveFilters =

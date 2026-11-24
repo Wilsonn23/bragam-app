@@ -6,6 +6,7 @@ const usersRouter = require('./routes/users');
 const authRouter = require('./routes/auth');
 const poisRouter = require('./routes/pois');
 const ratingsRouter = require('./routes/ratings');
+const userDataRouter = require('./routes/userData');
 const openapiSpec = require('./openapi');
 require('dotenv').config();
 
@@ -31,6 +32,10 @@ function createApp(pool) {
 
   app.use('/api', poisRouter);
   app.use('/api', ratingsRouter);
+  app.use('/api/users/:userId', (req, res, next) => {
+    if (/^\/(?:trips|bookmarks)(?:\/|$)/.test(req.path)) return userDataRouter(req, res, next);
+    next();
+  });
   app.use('/api/users', usersRouter);
   app.use('/api/auth', authRouter);
 

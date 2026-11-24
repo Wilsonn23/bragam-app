@@ -25,6 +25,7 @@ import {
   saveUserTripPlan,
   appendStopToExistingTrip,
   deleteUserTripPlan,
+  logoutUser,
 } from './src/services/userDataService';
 import { applyRatingOverrides } from './src/poi/ratings';
 
@@ -171,18 +172,10 @@ function MainApp() {
     const targetTrip = tripPlans.find((p) => p.id === tripId);
     const currentCount = targetTrip?.stops?.length || 0;
 
-    setTripPlans((prev) =>
-      prev.map((plan) => {
-        if (plan.id !== tripId) return plan;
-        return {
-          ...plan,
-          stops: [...(plan.stops || []), newStop],
-        };
-      })
-    );
-
     try {
       await appendStopToExistingTrip(currentUser.id,tripId, newStop, currentCount);
+      setTripPlans((prev) => prev.map(plan => plan.id === tripId
+        ? { ...plan, stops: [...(plan.stops || []), newStop] } : plan));
       Alert.alert(
         'Ditambahkan ke Trip',
         `${newStop.name} berhasil ditambahkan ke "${tripTitle}".`
@@ -303,24 +296,26 @@ function MainApp() {
 
   // Simpan rute multi-POI dari NavigationScreen sebagai Trip baru ke Supabase
   const handleSaveNavigationAsTrip = async (newPlan) => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id) return false;
     try {
       const persistedPlan = await saveUserTripPlan(currentUser.id, newPlan);
       setTripPlans((prev) => [persistedPlan, ...prev]);
+      return true;
     } catch (err) {
       Alert.alert(
         'Gagal Menyimpan Trip',
         err?.message || 'Tidak dapat menyimpan Trip baru ke database.'
       );
+      return false;
     }
   };
 
   // Hapus Trip Plan setelah konfirmasi "Ya"
   const handleDeleteTripPlan = async (planId) => {
     if (!currentUser?.id) return;
-    setTripPlans((prev) => prev.filter((p) => p.id !== planId));
     try {
       await deleteUserTripPlan(currentUser.id, planId);
+      setTripPlans((prev) => prev.filter((p) => p.id !== planId));
     } catch (err) {
       Alert.alert(
         'Gagal Menghapus Trip',
@@ -471,7 +466,7 @@ function MainApp() {
         return (
           <AccountScreen
             user={currentUser}
-            onLogout={() => setCurrentUser(null)}
+          onLogout={() => { logoutUser(); setCurrentUser(null); }}
           />
         );
       default:

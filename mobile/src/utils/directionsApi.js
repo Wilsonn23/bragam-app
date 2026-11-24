@@ -1,5 +1,15 @@
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
+async function fetchWithTimeout(url, timeoutMs = 6000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally { clearTimeout(timer); }
+}
+
 // Titik-titik jalur pedestrian (trotoar) sepanjang koridor Jl. Braga dari Utara ke Selatan
 const BRAGA_PEDESTRIAN_SPINE = [
   { latitude: -6.9158, longitude: 107.60872 }, // Utara (Simpang Suniaraja)
@@ -205,8 +215,7 @@ async function fetchFromGoogleDirections(origin, destination, destinationName) {
     `&destination=${destination.latitude},${destination.longitude}` +
     `&mode=walking&language=id&key=${GOOGLE_MAPS_API_KEY}`;
 
-  const res = await fetch(url);
-  const json = await res.json();
+  const json = await fetchWithTimeout(url);
 
   if (json.status !== 'OK' || !json.routes?.length) {
     throw new Error(json.status || 'Google Directions unavailable');
@@ -263,8 +272,7 @@ async function fetchFromOsmPedestrian(origin, destination, destinationName) {
     `${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}` +
     `?overview=full&geometries=geojson&steps=true`;
 
-  const res = await fetch(url);
-  const json = await res.json();
+  const json = await fetchWithTimeout(url);
 
   if (json.code !== 'Ok' || !json.routes?.length) {
     throw new Error('OSM foot route unavailable');
@@ -347,12 +355,11 @@ export async function fetchWalkingRoute(
 
   // Jika rute gagal diambil ATAU rute memutar tidak wajar (> 1.8x jarak lurus) di dalam koridor Jl. Braga,
   // gunakan jalur trotoar langsung sepanjang koridor Jl. Braga
-  if (
-    !routeResult ||
-    (bothInBraga && routeResult.distanceMeters > Math.max(120, directMeters * 1.8))
-  ) {
+  if (bothInBraga && (!routeResult || routeResult.distanceMeters > Math.max(120, directMeters * 1.8))) {
     return buildBragaCorridorWalk(origin, destination, destinationName);
   }
+
+  if (!routeResult) throw new Error('Rute belum tersedia. Periksa koneksi atau konfigurasi layanan peta.');
 
   return routeResult;
 }

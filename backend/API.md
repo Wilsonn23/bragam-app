@@ -265,6 +265,21 @@ Mengambil semua rating milik satu user berdasarkan UUID.
 | `409` | Email sudah terdaftar |
 | `500` | Query database gagal |
 
+## Trip dan bookmark pengguna
+
+Login melalui `POST /api/auth/login` mengembalikan `user` dan bearer `token`.
+Endpoint `/api/users/:userId/trips` dan `/api/users/:userId/bookmarks` memerlukan
+header `Authorization: Bearer <token>` milik user tersebut. Token berlaku 12 jam,
+tersimpan di memori backend, dan dapat dicabut melalui `POST /api/auth/logout`.
+Ketika backend direstart, pengguna perlu login kembali. Penyimpanan sesi di memori
+ditujukan untuk satu proses backend; beberapa proses memerlukan penyimpanan sesi bersama.
+
+Trip mendukung GET, POST (buat atau perbarui jika ID trip UUID), DELETE
+`/:tripId`, dan POST `/:tripId/stops`. Pembuatan atau penggantian daftar tujuan
+dijalankan dalam transaksi agar kegagalan satu tujuan tidak menyimpan sebagian trip.
+Bookmark mendukung GET, POST, dan DELETE `/:poiId`. Tabel `trips`, `trip_stops`,
+dan `user_bookmarks` harus sudah tersedia di database yang digunakan.
+
 ## POI uji GPS bersama
 
 Database bersama memiliki salinan **Braga CityWalk (Uji GPS)** dengan ID `TEST-LOCAL`

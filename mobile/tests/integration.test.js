@@ -1,6 +1,14 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+// Native Expo constants are unavailable to Node's test runner; these tests inject fetch.
+const Module = require('node:module');
+const originalLoad = Module._load;
+Module._load = function(request, parent, isMain) {
+ if (request === '../config/api' && parent?.filename.endsWith('/src/poi/api.js')) return { API_BASE_URL: 'http://test.invalid' };
+ return originalLoad.apply(this, arguments);
+};
 const { fetchPois } = require('../src/poi/api');
+Module._load = originalLoad;
 const { adaptPois } = require('../src/poi/adapter');
 const { createPoiStore } = require('../src/poi/store');
 const { notificationContent, openPoiDetail } = require('../src/poi/notification');

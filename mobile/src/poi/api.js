@@ -1,5 +1,6 @@
 const { adaptPois } = require('./adapter');
 const { API_BASE_URL } = require('../config/api');
+const session = require('../services/session');
 
 /** @param {{signal?: AbortSignal, fetchImpl?: typeof fetch, baseUrl?: string}} [options] */
 async function fetchPois({ signal, fetchImpl = fetch, baseUrl = API_BASE_URL } = {}) {
@@ -34,7 +35,8 @@ async function loginUser(email, password) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Login gagal (${response.status}).`);
-  if (!data.user) throw new Error('Response login tidak valid.');
+  if (!data.user || !data.token) throw new Error('Response login tidak valid. Pastikan backend sudah diperbarui.');
+  session.setToken(data.token);
   return data.user;
 }
 
@@ -46,7 +48,7 @@ async function registerUser(name, email, password) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Registrasi gagal (${response.status}).`);
-  return data;
+  return loginUser(email, password);
 }
 
 async function fetchPoiRatings(poiId) {
