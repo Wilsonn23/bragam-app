@@ -35,22 +35,29 @@ router.get('/:id', async (req, res, next) => {
 });
 
 router.post('/', async (req, res, next) => {
-  const validation = validateCreateInput(req.body);
-  if (validation.error) return res.status(400).json({ error: validation.error });
+  const result = await createUser(req.db, req.body).catch(next);
+  if (!result) return;
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.status(201).json(result.user);
+});
 
+/** Shared by POST /api/users and POST /api/auth/register. */
+async function createUser(db, body) {
+  const validation = validateCreateInput(body);
+  if (validation.error) return { status: 400, error: validation.error };
   try {
     const passwordHash = await bcrypt.hash(validation.password, 12);
-    const { rows } = await req.db.query(`
+    const { rows } = await db.query(`
       INSERT INTO public.users (id, email, name, password_hash)
       VALUES ($1, $2, $3, $4)
       RETURNING id, email, name, created_at, updated_at
     `, [crypto.randomUUID(), validation.email, validation.name, passwordHash]);
-    res.status(201).json(rows[0]);
+    return { user: rows[0] };
   } catch (error) {
-    if (error.code === '23505') return res.status(409).json({ error: 'Email user sudah terdaftar.' });
-    next(error);
+    if (error.code === '23505') return { status: 409, error: 'Email user sudah terdaftar.' };
+    throw error;
   }
-});
+}
 
 router.patch('/:id', async (req, res, next) => {
   if (!isUuid(req.params.id)) return res.status(400).json({ error: 'ID user tidak valid.' });
@@ -141,3 +148,4 @@ function isUuid(value) {
 }
 
 module.exports = router;
+module.exports.createUser = createUser;

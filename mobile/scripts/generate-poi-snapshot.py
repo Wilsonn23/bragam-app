@@ -23,8 +23,12 @@ for row in rows:
         'shortDescription': row['description'], 'description': row['description'],
         'history': row.get('history'), 'openingHours': row.get('opening_hours'),
         'menuHighlights': row.get('menu_highlights'),
+        'timeCategory': row.get('time_category') or None,
+        'environment': row.get('environment') or None,
+        'avgDurationMinutes': number(row.get('avg_duration_minutes')),
         'priceMin': number(row.get('price_min')), 'priceMax': number(row.get('price_max')),
-        'rating': number(row.get('rating')), 'reviewsCount': number(row.get('reviews_count')),
+        # Rating/review counts are never taken from the CSV: they are seed values, not real
+        # user reviews. Live ratings come from the API (poi_ratings); offline shows none.
         'audioGuideUrl': row.get('audio_guide_url') or None,
         'notificationTitle': row.get('notification_title'),
     })

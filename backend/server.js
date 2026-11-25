@@ -6,6 +6,7 @@ const usersRouter = require('./routes/users');
 const authRouter = require('./routes/auth');
 const poisRouter = require('./routes/pois');
 const ratingsRouter = require('./routes/ratings');
+const preferencesRouter = require('./routes/preferences');
 const userDataRouter = require('./routes/userData');
 const openapiSpec = require('./openapi');
 require('dotenv').config();
@@ -32,6 +33,7 @@ function createApp(pool) {
 
   app.use('/api', poisRouter);
   app.use('/api', ratingsRouter);
+  app.use('/api', preferencesRouter);
   app.use('/api/users/:userId', (req, res, next) => {
     if (/^\/(?:trips|bookmarks)(?:\/|$)/.test(req.path)) return userDataRouter(req, res, next);
     next();
@@ -40,7 +42,7 @@ function createApp(pool) {
   app.use('/api/auth', authRouter);
 
   app.use((error, req, res, next) => {
-    console.error('Database request failed:', error.code || 'unknown');
+    console.error('Database request failed:', error.code || 'unknown', error.message || '');
     res.status(500).json({ error: 'Database request failed.' });
   });
 
@@ -49,7 +51,9 @@ function createApp(pool) {
 
 if (require.main === module) {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined });
+    ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+    // Fail the request with an error instead of hanging forever when the pooler is full/unreachable.
+    connectionTimeoutMillis: 10000 });
   createApp(pool).listen(process.env.PORT || 5000, () => console.log('BRAGAm API server ready'));
 }
 module.exports = { createApp };

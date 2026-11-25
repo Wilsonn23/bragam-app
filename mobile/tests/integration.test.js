@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const Module = require('node:module');
 const originalLoad = Module._load;
 Module._load = function(request, parent, isMain) {
- if (request === '../config/api' && parent?.filename.endsWith('/src/poi/api.js')) return { API_BASE_URL: 'http://test.invalid' };
+ // Normalise separators so the stub also matches Windows paths (\src\poi\api.js).
+ if (request === '../config/api' && parent?.filename.replace(/\\/g, '/').endsWith('/src/poi/api.js')) return { API_BASE_URL: 'http://test.invalid' };
  return originalLoad.apply(this, arguments);
 };
 const { fetchPois } = require('../src/poi/api');

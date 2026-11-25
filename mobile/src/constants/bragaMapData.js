@@ -23,7 +23,6 @@ export const BRAGA_POIS = [
     name: 'Braga Citywalk',
     address: 'Jl. Braga No.99–101, Braga, Kec. Sumur Bandung',
     distance: '150m',
-    rating: '5.0',
     coordinate: { latitude: -6.9168, longitude: 107.6095 },
   },
   {
@@ -31,7 +30,6 @@ export const BRAGA_POIS = [
     name: 'Sweet Cantina',
     address: 'Jl. Braga No.89, Braga, Kec. Sumur Bandung',
     distance: '80m',
-    rating: '5.0',
     coordinate: { latitude: -6.9173, longitude: 107.6094 },
   },
   {
@@ -39,7 +37,6 @@ export const BRAGA_POIS = [
     name: 'Kopi Toko Djawa',
     address: 'Jl. Braga No.81, Braga, Kec. Sumur Bandung',
     distance: '120m',
-    rating: '5.0',
     coordinate: { latitude: -6.9177, longitude: 107.6093 },
   },
   {
@@ -47,7 +44,6 @@ export const BRAGA_POIS = [
     name: 'Museum Konferensi Asia Afrika',
     address: 'Jl. Asia Afrika No.65 (Ujung Selatan Jl. Braga)',
     distance: '350m',
-    rating: '5.0',
     coordinate: { latitude: -6.9211, longitude: 107.6095 },
   },
 ];

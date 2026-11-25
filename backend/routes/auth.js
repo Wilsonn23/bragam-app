@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { createSession, revokeSession } = require('../session');
+const { createSession, revokeSession, bearerToken } = require('../session');
+const { createUser } = require('./users');
 
 const router = express.Router();
 
@@ -36,9 +37,19 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
+// Create an account and start a session in one step.
+router.post('/register', async (req, res, next) => {
+  try {
+    const result = await createUser(req.db, req.body);
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    res.status(201).json({ user: result.user, token: createSession(result.user.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/logout', (req, res) => {
-  const token = /^Bearer (\S+)$/.exec(req.get('Authorization') || '')?.[1];
-  revokeSession(token);
+  revokeSession(bearerToken(req));
   res.status(204).end();
 });
 

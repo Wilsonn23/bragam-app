@@ -16,6 +16,7 @@ import {
 } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 import { WireframeImageBox } from '../components/PoiCardComponents';
+import { getRatingStars } from '../poi/presentation';
 
 export default function BookmarkScreen({
   bookmarkedPois = [],
@@ -100,7 +101,10 @@ export default function BookmarkScreen({
           {bookmarkedPois.map((poi) => {
             const distanceLabel =
               poi.distance || `${poi.triggerRadiusMeters || 15}m`;
-            const ratingLabel = poi.rating || '4.6';
+            // Real rating only; no placeholder value or fixed stars.
+            const ratingValue = Number(poi.rating);
+            const hasRating = Number.isFinite(ratingValue) && ratingValue > 0;
+            const ratingLabel = hasRating ? ratingValue.toFixed(1) : 'Belum ada rating';
 
             return (
               <View key={String(poi.id || poi.name)} style={styles.card}>
@@ -135,10 +139,10 @@ export default function BookmarkScreen({
                       </Text>
                       <View style={styles.ratingRow}>
                         <Text style={styles.ratingText}>{ratingLabel}</Text>
-                        {[1, 2, 3, 4].map((star) => (
+                        {hasRating && getRatingStars(ratingValue).map((name, index) => (
                           <Ionicons
-                            key={star}
-                            name="star"
+                            key={index}
+                            name={name}
                             size={12}
                             color={COLORS.darkPurple}
                             style={{ marginLeft: 2 }}

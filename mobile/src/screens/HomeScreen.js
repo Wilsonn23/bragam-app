@@ -11,9 +11,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
-import { PoiDetailFooter } from '../components/PoiCardComponents';
-import { PoiFirstImage } from '../components/PoiImageGallery';
 import { BRAGA_POIS } from '../constants/bragaMapData';
+import { ContextBanner } from '../components/RecommendationParts';
+import RecommendationCarousel from '../components/RecommendationCarousel';
+
+const HOME_RECOMMENDATION_COUNT = 5;
 
 function haversineMeters(a, b) {
   if (!a || !b) return 0;
@@ -75,16 +77,6 @@ function resolveUserDisplayName(user) {
   return String(rawName || 'User').trim();
 }
 
-function pickRandomPois(sourceList, count = 3) {
-  const pool = Array.isArray(sourceList) ? [...sourceList] : [];
-  if (pool.length <= count) return pool;
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  return pool.slice(0, count);
-}
-
 export default function HomeScreen({
   user = null,
   pois = [],
@@ -98,6 +90,11 @@ export default function HomeScreen({
   onUseTrip,
   onEditTrip,
   onCreateTrip,
+  recommendations = null,
+  weatherStatus = 'loading',
+  onRefreshWeather = undefined,
+  onOpenRecommendations = undefined,
+  onOpenPreferences = undefined,
 }) {
   const insets = useSafeAreaInsets();
   const topInset =
@@ -129,30 +126,11 @@ export default function HomeScreen({
   const activeTrip = tripPlans[tripIndex] || null;
   const activeTripStops = activeTrip?.stops || [];
 
-  // Pilih 3 POI acak dari dataset Braga
-  const [recommendedIndex, setRecommendedIndex] = useState(0);
-  const randomRecommendedPois = useMemo(
-    () => pickRandomPois(datasetPois, 3),
-    [datasetPois]
+  // Rekomendasi kontekstual (preferensi, waktu, lokasi, rating, cuaca) dari engine
+  const recommendedItems = useMemo(
+    () => (recommendations?.items || []).slice(0, HOME_RECOMMENDATION_COUNT),
+    [recommendations]
   );
-
-  useEffect(() => {
-    if (recommendedIndex >= randomRecommendedPois.length) {
-      setRecommendedIndex(0);
-    }
-  }, [randomRecommendedPois.length, recommendedIndex]);
-
-  const currentRecommended = randomRecommendedPois[recommendedIndex] || null;
-
-  const isCurrentRecommendedSaved = useMemo(() => {
-    if (!currentRecommended) return false;
-    return bookmarkedPois.some(
-      (item) =>
-        (currentRecommended.id &&
-          String(item.id) === String(currentRecommended.id)) ||
-        item.name?.toLowerCase() === currentRecommended.name?.toLowerCase()
-    );
-  }, [bookmarkedPois, currentRecommended]);
 
   const handlePrevTrip = () => {
     if (tripPlans.length <= 1) return;
@@ -162,19 +140,6 @@ export default function HomeScreen({
   const handleNextTrip = () => {
     if (tripPlans.length <= 1) return;
     setTripIndex((prev) => (prev + 1) % tripPlans.length);
-  };
-
-  const handlePrevRecommended = () => {
-    if (randomRecommendedPois.length <= 1) return;
-    setRecommendedIndex(
-      (prev) =>
-        (prev - 1 + randomRecommendedPois.length) % randomRecommendedPois.length
-    );
-  };
-
-  const handleNextRecommended = () => {
-    if (randomRecommendedPois.length <= 1) return;
-    setRecommendedIndex((prev) => (prev + 1) % randomRecommendedPois.length);
   };
 
   return (
@@ -421,79 +386,64 @@ export default function HomeScreen({
             <View style={styles.orLine} />
           </View>
 
-          {/* Section 2: Rekomendasi Destinasi Braga (3 POI Acak) */}
+          {/* Section 2: Rekomendasi kontekstual */}
           <Text style={styles.sectionHeading}>
-            Coba Kunjungi Rekomendasi Destinasi Braga!
+            Rekomendasi Untukmu di Braga
           </Text>
 
-          {currentRecommended ? (
+          {recommendations && (
+            <View style={styles.recoContextWrap}>
+              <ContextBanner
+                context={recommendations.context}
+                weatherStatus={weatherStatus}
+                onRefreshWeather={onRefreshWeather}
+              />
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={onOpenPreferences}
+                style={styles.recoPrefBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Atur preferensi rekomendasi"
+              >
+                <Ionicons name="options-outline" size={16} color={COLORS.darkPurple} />
+                <Text style={styles.recoPrefText}>Atur preferensi</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {recommendedItems.length > 0 ? (
             <>
-              <View style={styles.carouselWrapper}>
-                {randomRecommendedPois.length > 1 && (
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={handlePrevRecommended}
-                    style={[styles.carouselArrowBtn, styles.carouselArrowLeft]}
-                    accessibilityLabel="Rekomendasi Sebelumnya"
-                  >
-                    <Ionicons
-                      name="chevron-back"
-                      size={18}
-                      color={COLORS.darkPurple}
-                    />
-                  </TouchableOpacity>
-                )}
+              {/* Geser kartu untuk melihat rekomendasi lain */}
+              <RecommendationCarousel
+                items={recommendedItems}
+                bookmarkedPois={bookmarkedPois}
+                bleed={20}
+                onOpenDetail={onOpenDetail}
+                onOpenDirections={onOpenDirections}
+                onToggleSave={onToggleSave}
+                onAddToItinerary={onAddToItinerary}
+              />
 
-                <View style={styles.recommendedCard}>
-                  <PoiFirstImage
-                    poi={currentRecommended}
-                    style={styles.recommendationImage}
-                  />
-
-                  <View style={styles.recommendedBody}>
-                    <PoiDetailFooter
-                      name={currentRecommended.name}
-                      isSaved={isCurrentRecommendedSaved}
-                      onCheckDetail={() => onOpenDetail?.(currentRecommended)}
-                      onDirections={() => onOpenDirections?.(currentRecommended)}
-                      onSave={() => onToggleSave?.(currentRecommended)}
-                      onAddToItinerary={() =>
-                        onAddToItinerary?.(currentRecommended)
-                      }
-                    />
-                  </View>
-                </View>
-
-                {randomRecommendedPois.length > 1 && (
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={handleNextRecommended}
-                    style={[styles.carouselArrowBtn, styles.carouselArrowRight]}
-                    accessibilityLabel="Rekomendasi Berikutnya"
-                  >
-                    <Ionicons
-                      name="chevron-forward"
-                      size={18}
-                      color={COLORS.darkPurple}
-                    />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Bottom Carousel Dots (3 POI Acak) */}
-              <View style={[styles.dotsRow, { marginTop: 12 }]}>
-                {randomRecommendedPois.map((item, idx) => (
-                  <TouchableOpacity
-                    key={item.id || idx}
-                    onPress={() => setRecommendedIndex(idx)}
-                    style={[
-                      styles.dot,
-                      idx === recommendedIndex && styles.dotActive,
-                    ]}
-                  />
-                ))}
-              </View>
+              {onOpenRecommendations && (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={onOpenRecommendations}
+                  style={styles.recoSeeAllBtn}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.recoSeeAllText}>
+                    Lihat semua {recommendations?.items.length || ''} rekomendasi
+                  </Text>
+                  <Ionicons name="arrow-forward" size={16} color={COLORS.white} />
+                </TouchableOpacity>
+              )}
             </>
+          ) : recommendations && recommendations.context.hiddenClosed > 0 ? (
+            <View style={styles.recoEmpty}>
+              <Text style={styles.recoEmptyText}>
+                Tempat yang cocok sedang tutup. Coba ubah waktu kunjungan di preferensi.
+              </Text>
+            </View>
           ) : (
             <Text style={styles.sectionHeading}>
               Buka Explore untuk memuat atau mencoba ulang destinasi.
@@ -805,21 +755,51 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textPrimary,
   },
-  recommendedCard: {
-    borderWidth: 1.5,
-    borderColor: COLORS.borderSubtle,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.white,
-    overflow: 'hidden',
+  recoContextWrap: {
+    marginBottom: 14,
   },
-  recommendationImage: {
-    width: '100%',
-    height: 150,
+  recoPrefBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: 5,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.pill,
     backgroundColor: COLORS.lavenderTint,
   },
-  recommendedBody: {
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 12,
+  recoPrefText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.darkPurple,
+  },
+  recoSeeAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 14,
+    alignSelf: 'center',
+    backgroundColor: COLORS.darkPurple,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  recoSeeAllText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  recoEmpty: {
+    backgroundColor: COLORS.lavenderTint,
+    borderRadius: RADIUS.md,
+    padding: 14,
+  },
+  recoEmptyText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

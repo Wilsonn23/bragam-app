@@ -38,6 +38,10 @@ test('shared Citywalk remains one database POI in production and with old local 
       const ids = Array.isArray(values[0]) ? values[0] : [values[0]];
       return { rows: ids.includes(shared.id) ? [image] : [] };
     }
+    if (sql.includes('FROM poi_ratings')) {
+      // The persisted test POI has its own real ratings; P11 has none yet.
+      return { rows: values[0].includes(shared.id) ? [{ poi_id: shared.id, average_rating: '4.0', review_count: '1' }] : [] };
+    }
     if (sql.includes('ST_DWithin')) return { rows: [{ ...shared, distance_meters: 0 }] };
     if (sql.includes('WHERE id = $1')) return { rows: [shared] };
     return { rows: [original, shared] };
@@ -63,7 +67,11 @@ test('shared Citywalk remains one database POI in production and with old local 
       assert.equal(detail.isLocalTest, undefined);
       assert.equal(detail.description, original.description);
       assert.equal(detail.history, original.history);
-      assert.equal(detail.rating, original.rating);
+      assert.equal(detail.rating, 4, 'own user ratings, not the seeded P11 value');
+      assert.equal(detail.reviewsCount, 1);
+      const p11 = records.find(p => p.id === original.id);
+      assert.equal(p11.rating, undefined, 'unrated POI shows no seeded rating');
+      assert.equal(p11.reviewsCount, 0);
       assert.equal(detail.images[0].imageUrl, image.image_url);
       assert.equal((await get(`/pois/${shared.id}/images`))[0].poiId, shared.id);
       assert.equal((await get('/pois/nearby?latitude=-6.890389&longitude=107.609583')).id, shared.id);

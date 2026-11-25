@@ -1629,9 +1629,11 @@ export default function TripSettingScreen({
               >
                 {filteredManualPois.map((poi) => {
                   const isAdded = isPoiAlreadyInStops(poi);
-                  const ratingVal = Number(poi.rating)
-                    ? Number(poi.rating).toFixed(1)
-                    : '5.0';
+                  // Real rating only: unrated places say so instead of a placeholder.
+                  const reviewCount = poi.reviewsCount ?? poi.reviews_count ?? 0;
+                  const ratingVal = Number(poi.rating) > 0
+                    ? `${Number(poi.rating).toFixed(1)} (${reviewCount})`
+                    : 'Belum ada rating';
 
                   return (
                     <View
@@ -1657,9 +1659,7 @@ export default function TripSettingScreen({
                             size={13}
                             color={COLORS.darkPurple}
                           />
-                          <Text style={styles.ratingText}>
-                            {ratingVal} ({poi.reviews_count ?? 0})
-                          </Text>
+                          <Text style={styles.ratingText}>{ratingVal}</Text>
                           <Text style={styles.dotSeparator}>•</Text>
                           <Text style={styles.hoursText} numberOfLines={1}>
                             {poi.hoursLabel}

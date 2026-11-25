@@ -40,6 +40,27 @@ Semua request dengan body harus menggunakan:
 Content-Type: application/json
 ```
 
+## Autentikasi
+
+Tidak ada secret yang perlu diatur. Login menghasilkan token sesi acak yang disimpan di
+memori backend (`backend/session.js`), berlaku 12 jam, dan bisa dicabut lewat logout.
+Saat backend di-restart semua sesi hilang dan pengguna perlu login lagi. Sesi di memori
+ditujukan untuk satu proses backend; beberapa proses memerlukan penyimpanan sesi bersama.
+
+* `POST /api/auth/login` dengan `{ "email", "password" }` → `{ "user": {...}, "token": "..." }`
+* `POST /api/auth/register` dengan `{ "name", "email", "password" }` → `201 { "user": {...}, "token": "..." }`
+* `POST /api/auth/logout` dengan header `Authorization` → `204`, token tidak berlaku lagi
+
+Endpoint bertanda 🔒 membutuhkan header:
+
+```http
+Authorization: Bearer <token>
+```
+
+Respons `401` berarti token tidak ada, tidak valid, atau kedaluwarsa (login ulang).
+Respons `403` berarti token valid tetapi data tersebut milik user lain. Di Swagger UI,
+klik **Authorize** lalu tempel token.
+
 ## Health check
 
 ### `GET /health`
@@ -221,14 +242,16 @@ Mengambil ringkasan dan daftar review sebuah POI:
 Trigger database memperbarui kolom `rating` dan `reviews_count` pada tabel `pois`
 setelah insert, update, atau delete rating.
 
-### `POST /api/pois/:poiId/ratings`
+### 🔒 `POST /api/pois/:poiId/ratings`
 
-Membuat atau memperbarui rating user.
+Membuat atau memperbarui rating milik user yang sedang login. Penulis rating diambil
+dari token, bukan dari body; `userId` di body opsional dan ditolak (`403`) bila berbeda.
 
 ```bash
 curl -X POST http://localhost:5000/api/pois/P01/ratings \
   -H "Content-Type: application/json" \
-  -d '{"userId":"3f2504e0-4f89-41d3-9a0c-0305e82c3301","rating":5,"review":"Tempatnya bagus"}'
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"rating":5,"review":"Tempatnya bagus"}'
 ```
 
 `rating` harus bilangan bulat 1–5. `review` opsional dan dibatasi 2000 karakter.
@@ -237,9 +260,9 @@ curl -X POST http://localhost:5000/api/pois/P01/ratings \
 
 Mengambil satu rating berdasarkan ID numerik.
 
-### `PATCH /api/ratings/:id`
+### 🔒 `PATCH /api/ratings/:id`
 
-Memperbarui `rating` dan/atau `review`.
+Memperbarui `rating` dan/atau `review`. Hanya pemilik rating (`403` untuk user lain).
 
 ```json
 {
@@ -248,31 +271,66 @@ Memperbarui `rating` dan/atau `review`.
 }
 ```
 
-### `DELETE /api/ratings/:id`
+### 🔒 `DELETE /api/ratings/:id`
 
-Menghapus satu rating. Response berhasil: `204 No Content`.
+Menghapus satu rating milik user yang sedang login. Response berhasil: `204 No Content`.
 
 ### `GET /api/users/:id/ratings`
 
 Mengambil semua rating milik satu user berdasarkan UUID.
+
+## Preferensi rekomendasi
+
+Disimpan di tabel `user_preferences` (kolom JSONB, satu baris per user). Jalankan
+`migrations/20261123_user_preferences.sql` sebelum memakai endpoint ini.
+
+Kedua endpoint hanya bisa diakses oleh user itu sendiri (token harus milik `:id`).
+
+### 🔒 `GET /api/users/:id/preferences`
+
+Mengembalikan preferensi user. Bila user belum pernah menyimpan, nilai default dikembalikan
+dengan `updatedAt: null`.
+
+### 🔒 `PUT /api/users/:id/preferences`
+
+Menyimpan seluruh preferensi. Field yang tidak dikirim memakai default; nilai di luar daftar
+berikut ditolak dengan `400`.
+
+| Field | Nilai | Default |
+|---|---|---|
+| `interests` | array dari `kuliner`, `kafe`, `oleh`, `sejarah`, `hiburan`, `malam` (kosong = semua) | `[]` |
+| `visitTime` | `auto` (ikuti jam sekarang), `pagi`, `siang`, `malam` | `auto` |
+| `environment` | `any`, `indoor`, `outdoor` | `any` |
+| `maxBudget` | `null`, `50000`, `100000`, `200000` (IDR per orang) | `null` |
+| `hideClosed` | boolean | `true` |
+| `weights` | objek `preference`, `time`, `location`, `rating`, `weather` bernilai 0–3; minimal satu > 0 | semua `2` |
+
+```bash
+curl -X PUT http://localhost:5000/api/users/3f2504e0-4f89-41d3-9a0c-0305e82c3301/preferences \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"interests":["kafe","sejarah"],"visitTime":"auto","environment":"indoor","maxBudget":100000,"weights":{"weather":3}}'
+```
+
+Skor rekomendasi dihitung di aplikasi mobile (`mobile/src/recommendation/engine.js`) dari
+preferensi ini, waktu kunjungan, lokasi GPS, rating, dan cuaca terkini (Open-Meteo).
+Respons POI kini juga menyertakan `timeCategory`, `environment`, dan `avgDurationMinutes`.
 
 ## Status error umum
 
 | Status | Arti |
 |---:|---|
 | `400` | Input atau UUID tidak valid |
+| `401` | Token sesi tidak ada, tidak valid, atau kedaluwarsa |
+| `403` | Token valid, tetapi data milik user lain |
 | `404` | Data tidak ditemukan |
 | `409` | Email sudah terdaftar |
 | `500` | Query database gagal |
 
 ## Trip dan bookmark pengguna
 
-Login melalui `POST /api/auth/login` mengembalikan `user` dan bearer `token`.
-Endpoint `/api/users/:userId/trips` dan `/api/users/:userId/bookmarks` memerlukan
-header `Authorization: Bearer <token>` milik user tersebut. Token berlaku 12 jam,
-tersimpan di memori backend, dan dapat dicabut melalui `POST /api/auth/logout`.
-Ketika backend direstart, pengguna perlu login kembali. Penyimpanan sesi di memori
-ditujukan untuk satu proses backend; beberapa proses memerlukan penyimpanan sesi bersama.
+Endpoint 🔒 `/api/users/:userId/trips` dan `/api/users/:userId/bookmarks` memerlukan
+header `Authorization: Bearer <token>` milik user tersebut (lihat **Autentikasi**).
 
 Trip mendukung GET, POST (buat atau perbarui jika ID trip UUID), DELETE
 `/:tripId`, dan POST `/:tripId/stops`. Pembuatan atau penggantian daftar tujuan

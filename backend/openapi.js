@@ -8,11 +8,54 @@ module.exports = {
   servers: [{ url: 'http://localhost:5000' }],
   tags: [
     { name: 'Health' },
+    { name: 'Auth' },
     { name: 'POI' },
     { name: 'Users' },
     { name: 'Ratings' },
+    { name: 'Preferences' },
   ],
   paths: {
+    '/api/auth/login': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Login dan dapatkan token sesi (berlaku 12 jam)',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object', required: ['email', 'password'],
+            properties: { email: { type: 'string', format: 'email' }, password: { type: 'string', format: 'password' } },
+          } } },
+        },
+        responses: {
+          200: { description: 'Login berhasil', content: { 'application/json': { schema: { $ref: '#/components/schemas/Session' } } } },
+          400: { $ref: '#/components/responses/ValidationError' },
+          401: { description: 'Email atau password salah' },
+        },
+      },
+    },
+    '/api/auth/register': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Daftar akun baru dan langsung dapatkan token sesi',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateUser' } } },
+        },
+        responses: {
+          201: { description: 'Akun dibuat', content: { 'application/json': { schema: { $ref: '#/components/schemas/Session' } } } },
+          400: { $ref: '#/components/responses/ValidationError' },
+          409: { description: 'Email sudah terdaftar' },
+        },
+      },
+    },
+    '/api/auth/logout': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Logout: cabut token sesi yang dikirim di header Authorization',
+        security: [{ bearerAuth: [] }],
+        responses: { 204: { description: 'Sesi dicabut' } },
+      },
+    },
     '/health': {
       get: {
         tags: ['Health'],
@@ -76,6 +119,7 @@ module.exports = {
       post: {
         tags: ['Ratings'],
         summary: 'Buat atau memperbarui rating user untuk POI',
+        security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
           content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateRating' } } },
@@ -97,12 +141,14 @@ module.exports = {
       patch: {
         tags: ['Ratings'],
         summary: 'Perbarui rating dan/atau review',
+        security: [{ bearerAuth: [] }],
         requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/UpdateRating' } } } },
         responses: { 200: { description: 'Rating diperbarui' }, 400: { $ref: '#/components/responses/ValidationError' }, 404: { description: 'Rating tidak ditemukan' } },
       },
       delete: {
         tags: ['Ratings'],
         summary: 'Hapus rating',
+        security: [{ bearerAuth: [] }],
         responses: { 204: { description: 'Rating dihapus' }, 404: { description: 'Rating tidak ditemukan' } },
       },
     },
@@ -112,6 +158,38 @@ module.exports = {
         tags: ['Ratings'],
         summary: 'Ambil semua rating milik user',
         responses: { 200: { description: 'Daftar rating user' }, 400: { $ref: '#/components/responses/ValidationError' } },
+      },
+    },
+    '/api/users/{id}/preferences': {
+      parameters: [{ $ref: '#/components/parameters/UserId' }],
+      get: {
+        tags: ['Preferences'],
+        summary: 'Ambil preferensi rekomendasi user (default bila belum disimpan)',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Preferensi user',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/PreferencesResponse' } } },
+          },
+          400: { $ref: '#/components/responses/ValidationError' },
+        },
+      },
+      put: {
+        tags: ['Preferences'],
+        summary: 'Simpan preferensi rekomendasi user (field yang tidak dikirim memakai default)',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/Preferences' } } },
+        },
+        responses: {
+          200: {
+            description: 'Preferensi tersimpan',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/PreferencesResponse' } } },
+          },
+          400: { $ref: '#/components/responses/ValidationError' },
+          404: { description: 'User tidak ditemukan' },
+        },
       },
     },
     '/api/users': {
@@ -190,6 +268,15 @@ module.exports = {
     },
   },
   components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'opaque session token',
+        description: 'Token dari /api/auth/login atau /api/auth/register. ' +
+          '401 = token tidak ada/kedaluwarsa, 403 = data milik user lain.',
+      },
+    },
     parameters: {
       Latitude: {
         name: 'latitude',
@@ -249,6 +336,48 @@ module.exports = {
           notificationTitle: { type: 'string' },
           audioGuideUrl: { type: 'string', nullable: true },
           distanceMeters: { type: 'number', nullable: true },
+          timeCategory: { type: 'string', example: 'siang, malam' },
+          environment: { type: 'string', enum: ['indoor', 'outdoor', 'both'] },
+          avgDurationMinutes: { type: 'number', example: 45 },
+        },
+      },
+      Preferences: {
+        type: 'object',
+        properties: {
+          interests: {
+            type: 'array',
+            items: { type: 'string', enum: ['kuliner', 'kafe', 'oleh', 'sejarah', 'hiburan', 'malam'] },
+            description: 'Kosong berarti semua kategori',
+          },
+          visitTime: { type: 'string', enum: ['auto', 'pagi', 'siang', 'malam'], default: 'auto' },
+          environment: { type: 'string', enum: ['any', 'indoor', 'outdoor'], default: 'any' },
+          maxBudget: { type: 'integer', nullable: true, enum: [null, 50000, 100000, 200000] },
+          hideClosed: { type: 'boolean', default: true },
+          weights: {
+            type: 'object',
+            description: 'Bobot faktor 0 (abaikan) sampai 3 (tinggi); minimal satu > 0',
+            properties: {
+              preference: { type: 'integer', minimum: 0, maximum: 3, default: 2 },
+              time: { type: 'integer', minimum: 0, maximum: 3, default: 2 },
+              location: { type: 'integer', minimum: 0, maximum: 3, default: 2 },
+              rating: { type: 'integer', minimum: 0, maximum: 3, default: 2 },
+              weather: { type: 'integer', minimum: 0, maximum: 3, default: 2 },
+            },
+          },
+        },
+      },
+      PreferencesResponse: {
+        type: 'object',
+        properties: {
+          preferences: { $ref: '#/components/schemas/Preferences' },
+          updatedAt: { type: 'string', format: 'date-time', nullable: true },
+        },
+      },
+      Session: {
+        type: 'object',
+        properties: {
+          user: { $ref: '#/components/schemas/User' },
+          token: { type: 'string', description: 'Kirim sebagai header Authorization: Bearer <token>' },
         },
       },
       User: {

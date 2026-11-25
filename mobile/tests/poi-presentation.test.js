@@ -10,7 +10,9 @@ test('all PB03 records present their own descriptive fields without defaults fro
     assert.equal(fields.history, poi.history.trim());
     assert.equal(fields.openingHours, poi.openingHours.trim());
     assert.equal(fields.menu, poi.menuHighlights.trim());
-    assert.equal(fields.hasRating, true);
+    // The offline snapshot carries no seeded ratings; real ones come only from poi_ratings via the API.
+    assert.equal(fields.hasRating, false);
+    assert.equal(fields.ratingSummary, 'Rating belum tersedia');
   }
 });
 

@@ -79,6 +79,8 @@ test('Citywalk clone keeps original data, gallery, audio identity and geofence b
       assert.deepEqual(values,['P11']);return {rows:[source]};
     }
     if(sql.includes('FROM poi_images')){assert.ok(values[0]==='P11'||values[0].includes('P11'));return {rows:images};}
+    // Real user ratings for the source; the seeded 4.6/1800 on the row must not be used.
+    if(sql.includes('FROM poi_ratings')){assert.ok(values[0].includes('P11'));return {rows:[{poi_id:'P11',average_rating:'4.2',review_count:'3'}]};}
     if(sql.includes('SELECT DISTINCT'))return {rows:[{category:source.category}]};
     if(sql.includes('ST_DWithin'))return {rows:[]};
     return {rows:[source]};
@@ -90,7 +92,7 @@ test('Citywalk clone keeps original data, gallery, audio identity and geofence b
   assert.equal(clone.name,'Braga CityWalk (Uji GPS)');assert.equal(clone.latitude,-6.890389);assert.equal(clone.longitude,107.609583);
   assert.equal(clone.isLocalTest,true);assert.equal(clone.sourcePoiId,'P11');assert.equal(clone.triggerRadiusMeters,15);assert.equal(clone.cooldownSeconds,60);
   assert.equal(clone.description,source.description);assert.equal(clone.history,source.history);assert.equal(clone.address,source.address);
-  assert.equal(clone.rating,4.6);assert.equal(clone.reviewsCount,1800);assert.equal(clone.openingHours,'10:00 - 22:00');
+  assert.equal(clone.rating,4.2);assert.equal(clone.reviewsCount,3);assert.equal(clone.openingHours,'10:00 - 22:00');
   assert.equal(clone.images[0].imageUrl,images[0].image_url);
   const detail=await get('/pois/TEST-LOCAL');assert.equal(detail.id,clone.id);assert.equal(detail.images[0].imageUrl,clone.images[0].imageUrl);
   const gallery=await get('/pois/TEST-LOCAL/images');assert.equal(gallery[0].poiId,'TEST-LOCAL');assert.equal(gallery[0].imageUrl,clone.images[0].imageUrl);
