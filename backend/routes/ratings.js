@@ -1,5 +1,5 @@
 const express = require('express');
-const { requireAuth } = require('../auth');
+const { requireSession } = require('../session');
 
 const router = express.Router();
 
@@ -63,7 +63,7 @@ router.get('/pois/:poiId/ratings', async (req, res, next) => {
   }
 });
 
-router.post('/pois/:poiId/ratings', requireAuth, async (req, res, next) => {
+router.post('/pois/:poiId/ratings', requireSession, async (req, res, next) => {
   const rating = validateRating(req.body?.rating);
   // The author is always the signed-in user; a body userId is only accepted if it matches.
   const userId = req.userId;
@@ -113,7 +113,7 @@ router.get('/ratings/:id', async (req, res, next) => {
   }
 });
 
-router.patch('/ratings/:id', requireAuth, async (req, res, next) => {
+router.patch('/ratings/:id', requireSession, async (req, res, next) => {
   const id = parseRatingId(req.params.id);
   if (!id) return res.status(400).json({ error: 'ID rating tidak valid.' });
   if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'Body request tidak valid.' });
@@ -152,7 +152,7 @@ router.patch('/ratings/:id', requireAuth, async (req, res, next) => {
   }
 });
 
-router.delete('/ratings/:id', requireAuth, async (req, res, next) => {
+router.delete('/ratings/:id', requireSession, async (req, res, next) => {
   const id = parseRatingId(req.params.id);
   if (!id) return res.status(400).json({ error: 'ID rating tidak valid.' });
 

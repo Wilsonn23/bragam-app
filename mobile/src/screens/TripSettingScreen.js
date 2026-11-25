@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,11 @@ import {
   StatusBar,
   Alert,
   PanResponder,
+  Animated,
+  Easing,
+  AccessibilityInfo,
+  LayoutAnimation,
+  UIManager,
   Modal,
   ActivityIndicator,
 } from 'react-native';
@@ -20,12 +25,15 @@ import { PoiFirstImage } from '../components/PoiImageGallery';
 import { BRAGA_POIS } from '../constants/bragaMapData';
 import { distanceMeters } from '../location/distance';
 import { API_BASE_URL } from '../config/api';
+import { createStopDrag, resolveStopDrag, swapStopsByKey, previewSwapOffsets } from '../utils/stopReorder';
 
 const MAX_DESTINATIONS = 12;
+const STOP_PREVIEW_MS = 150;
+const STOP_DROP_MS = 180;
+const STOP_MOVE_EASING = Easing.out(Easing.cubic);
 const BUDGET_MIN_LIMIT = 0;
 const BUDGET_MAX_LIMIT = 500000;
 const BUDGET_STEP = 10000;
-const ROW_ITEM_HEIGHT = 68;
 
 const TIME_OPTIONS = [
   { label: 'All Time', value: 'Semua' },
@@ -431,99 +439,101 @@ function BudgetRangeSlider({ minVal, maxVal, onChangeRange }) {
   );
 }
 
-// Komponen Item Destinasi dengan Drag-and-Drop
-function DraggableStopRow({
-  stop,
-  index,
-  totalCount,
-  onPressTime,
-  onRemove,
-  onDragStart,
-  onDragEnd,
-  onMoveIndex,
-}) {
-  const [isDragging, setIsDragging] = useState(false);
-  const lastStepOffset = useRef(0);
+// The grip owns the touch while its sibling card moves over the list.
+function DraggableStopRow({ stop, index, onPressTime, onRemove,
+  onDragStart, onDragMove, onDragEnd, onDropOffset, onMeasure, onMove,
+  registerPreview, isDragging, isReordering, reduceMotion }) {
+  const [translation] = useState(() => new Animated.Value(0));
+  const [previewTranslation] = useState(() => new Animated.Value(0));
+  const startY = useRef(null);
+  const settling = useRef(null);
 
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
-          setIsDragging(true);
-          lastStepOffset.current = 0;
-          onDragStart?.();
-        },
-        onPanResponderMove: (_, gesture) => {
-          const stepShift = Math.round(gesture.dy / ROW_ITEM_HEIGHT);
-          if (stepShift !== lastStepOffset.current) {
-            const targetIndex = Math.max(
-              0,
-              Math.min(totalCount - 1, index + (stepShift - lastStepOffset.current))
-            );
-            if (targetIndex !== index) {
-              lastStepOffset.current = stepShift;
-              onMoveIndex(index, targetIndex);
-            }
-          }
-        },
-        onPanResponderRelease: () => {
-          setIsDragging(false);
-          onDragEnd?.();
-        },
-        onPanResponderTerminate: () => {
-          setIsDragging(false);
-          onDragEnd?.();
-        },
-      }),
-    [index, totalCount, onMoveIndex, onDragStart, onDragEnd]
-  );
+  useLayoutEffect(() => registerPreview(stop.stopKey, previewTranslation),
+    [registerPreview, stop.stopKey, previewTranslation]);
+
+  useLayoutEffect(() => {
+    if (!isDragging) translation.setValue(0);
+  }, [isDragging, translation]);
+
+  useEffect(() => () => { settling.current?.stop(); }, []);
+
+  const beginDrag = event => {
+    if (!onDragStart(stop.stopKey)) return false;
+    startY.current = event.nativeEvent.pageY;
+    translation.setValue(0);
+    // Keep the native ScrollView from taking ownership of this touch.
+    return true;
+  };
+
+  const moveDrag = event => {
+    if (startY.current === null) return;
+    const offset = event.nativeEvent.pageY - startY.current;
+    if (!Number.isFinite(offset)) return;
+    translation.setValue(onDragMove(stop.stopKey, offset));
+  };
+
+  const drop = () => {
+    if (startY.current === null) return;
+    startY.current = null;
+    if (reduceMotion) {
+      onDragEnd(false);
+      return;
+    }
+    const animation = Animated.timing(translation, {
+      toValue: onDropOffset(), duration: STOP_DROP_MS, easing: STOP_MOVE_EASING,
+      useNativeDriver: false, isInteraction: false,
+    });
+    settling.current = animation;
+    animation.start(({ finished }) => {
+      settling.current = null;
+      if (finished) onDragEnd(false);
+    });
+  };
+
+  const cancelDrag = () => {
+    if (startY.current === null) return;
+    startY.current = null;
+    onDragEnd(true);
+  };
 
   return (
-    <View
-      style={[
-        styles.stopEditRow,
-        isDragging && styles.stopEditRowDragging,
-      ]}
-    >
-      <View {...panResponder.panHandlers} style={styles.dragGripBtn}>
-        <MaterialCommunityIcons
-          name="drag-vertical"
-          size={22}
-          color={COLORS.primaryPurple}
-        />
-      </View>
-
-      <View style={styles.orderBadge}>
-        <Text style={styles.orderBadgeText}>{index + 1}</Text>
-      </View>
-
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={() => onPressTime(index)}
-        style={styles.timePill}
-      >
-        <Ionicons name="time-outline" size={13} color={COLORS.darkPurple} />
-        <Text style={styles.timePillText}>{stop.time}</Text>
-      </TouchableOpacity>
-
-      <View style={{ flex: 1 }}>
-        <Text style={styles.stopEditName} numberOfLines={1}>
-          {stop.name}
-        </Text>
-        <Text style={styles.stopEditCat} numberOfLines={1}>
-          {extractSubcategory(stop)} • Buka {getPoiHoursLabel(stop)}
-        </Text>
-      </View>
-
-      <TouchableOpacity
-        onPress={() => onRemove(stop.stopKey)}
-        style={styles.iconActionBtn}
-      >
-        <Ionicons name="trash-outline" size={18} color="#C62828" />
-      </TouchableOpacity>
-    </View>
+    <Animated.View collapsable={false} onLayout={event => onMeasure(stop.stopKey, event.nativeEvent.layout)}
+      style={[isDragging && styles.stopEditRowActiveSlot, { transform: [{ translateY: previewTranslation }] }]}>
+      <Animated.View style={[styles.stopEditRow, isDragging && styles.stopEditRowDragging,
+        { transform: [{ translateY: translation }] }]}>
+        <View style={styles.dragGripBtn}>
+          <MaterialCommunityIcons name="drag-vertical" size={22} color={COLORS.primaryPurple} />
+        </View>
+        <View style={styles.orderBadge}><Text style={styles.orderBadgeText}>{index + 1}</Text></View>
+        <TouchableOpacity activeOpacity={0.8} disabled={isReordering} onPress={() => onPressTime(index)} style={styles.timePill}>
+          <Ionicons name="time-outline" size={13} color={COLORS.darkPurple} />
+          <Text style={styles.timePillText}>{stop.time}</Text>
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.stopEditName} numberOfLines={1}>{stop.name}</Text>
+          <Text style={styles.stopEditCat} numberOfLines={1}>{extractSubcategory(stop)} • Buka {getPoiHoursLabel(stop)}</Text>
+        </View>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Hapus ${stop.name}`} disabled={isReordering}
+          onPress={() => onRemove(stop.stopKey)} style={styles.iconActionBtn}>
+          <Ionicons name="trash-outline" size={18} color="#C62828" />
+        </TouchableOpacity>
+      </Animated.View>
+      <View collapsable={false} style={styles.dragGripTouch}
+        onStartShouldSetResponder={() => !isReordering}
+        onResponderGrant={beginDrag}
+        onResponderMove={moveDrag}
+        onResponderRelease={drop}
+        onResponderTerminate={cancelDrag}
+        onResponderTerminationRequest={() => false}
+        accessible accessibilityRole="adjustable" accessibilityLabel={`Ubah urutan ${stop.name}`}
+        accessibilityHint="Geser pegangan. Pada pembaca layar, usap ke atas atau bawah untuk mengubah urutan."
+        accessibilityActions={[{name:'increment', label:'Pindah ke bawah'}, {name:'decrement', label:'Pindah ke atas'}]}
+        onAccessibilityAction={event => {
+          if (isReordering) return;
+          if (event.nativeEvent.actionName === 'increment') onMove(stop.stopKey, index + 1);
+          if (event.nativeEvent.actionName === 'decrement') onMove(stop.stopKey, index - 1);
+        }} />
+    </Animated.View>
   );
 }
 
@@ -586,8 +596,43 @@ export default function TripSettingScreen({
   const [title, setTitle] = useState(
     initialPlan?.title || `Trip Plan ${existingCount + 1}`
   );
+  const savingPlan = useRef(false);
   const [mode, setMode] = useState('auto'); // 'auto' | 'manual'
-  const [scrollEnabled, setScrollEnabled] = useState(true);
+  const [draggingStopKey, setDraggingStopKey] = useState(null);
+  const dragRef = useRef(null);
+  const rowHeights = useRef({});
+  const previewRows = useRef(new Map());
+  const registerPreview = useCallback((key, translation) => {
+    const row = { translation, offset: 0, animation: null, settled: null };
+    previewRows.current.set(key, row);
+    return () => {
+      row.animation?.stop();
+      previewRows.current.delete(key);
+    };
+  }, []);
+  useLayoutEffect(() => {
+    if (draggingStopKey !== null) return;
+    // Clear the preview on the same commit that renders the final row order.
+    for (const row of previewRows.current.values()) {
+      if (!row.animation && row.offset === 0) continue;
+      row.animation?.stop();
+      row.animation = null;
+      row.settled = null;
+      row.offset = 0;
+      row.translation.setValue(0);
+    }
+  }, [draggingStopKey]);
+  useLayoutEffect(() => () => { dragRef.current = null; }, []);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isReduceMotionEnabled().then(value => { if (mounted) setReduceMotion(value); }).catch(() => {});
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+    return () => { mounted = false; subscription.remove(); };
+  }, []);
 
   // Pop-up pesan tidak ada POI cocok
   const [noMatchModalVisible, setNoMatchModalVisible] = useState(false);
@@ -923,14 +968,74 @@ export default function TripSettingScreen({
     });
   };
 
-  const handleMoveStopIndex = (fromIndex, toIndex) => {
+  const handleMoveStop = (stopKey, toIndex) => {
+    const fromIndex = stops.findIndex(stop => stop.stopKey === stopKey);
+    if (fromIndex < 0 || toIndex < 0 || toIndex >= stops.length || fromIndex === toIndex) return;
+    if (!reduceMotion && !dragRef.current) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const baseStartMins = startHour * 60 + startMinute;
     setStops((prev) => {
-      const copy = [...prev];
-      const [moved] = copy.splice(fromIndex, 1);
-      copy.splice(toIndex, 0, moved);
-      return recalculateSchedule(copy, baseStartMins, 0);
+      const reordered = swapStopsByKey(prev, stopKey, toIndex);
+      return reordered === prev ? prev : recalculateSchedule(reordered, baseStartMins, 0);
     });
+    AccessibilityInfo.announceForAccessibility(`${stops[fromIndex].name} dipindahkan ke urutan ${toIndex + 1}.`);
+  };
+
+  const handleDragStart = (stopKey) => {
+    if (dragRef.current) return false;
+    const geometry = createStopDrag(stops.map(stop => stop.stopKey), rowHeights.current, stopKey);
+    if (!geometry) return false;
+    dragRef.current = { stopKey, geometry, target: geometry.from };
+    setDraggingStopKey(stopKey);
+    return true;
+  };
+
+  const handleDragMove = (stopKey, offset) => {
+    const drag = dragRef.current;
+    if (!drag || drag.stopKey !== stopKey) return 0;
+    const { translation, target } = resolveStopDrag(drag.geometry, offset);
+    if (target !== drag.target) {
+      drag.target = target;
+      const offsets = previewSwapOffsets(drag.geometry, target);
+      for (const key of drag.geometry.keys) {
+        if (key === stopKey) continue;
+        const row = previewRows.current.get(key);
+        const nextOffset = offsets[key] ?? 0;
+        if (!row || row.offset === nextOffset) continue;
+        row.offset = nextOffset;
+        if (reduceMotion) {
+          row.translation.setValue(nextOffset);
+          continue;
+        }
+        const animation = Animated.timing(row.translation, {
+          toValue: nextOffset, duration: STOP_PREVIEW_MS, easing: STOP_MOVE_EASING,
+          useNativeDriver: Platform.OS !== 'web', isInteraction: false,
+        });
+        row.animation = animation;
+        row.settled = new Promise(resolve => animation.start(() => {
+          if (row.animation === animation) row.animation = null;
+          resolve(undefined);
+        }));
+      }
+    }
+    return translation;
+  };
+
+  const handleDragEnd = (cancelled) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const finish = () => {
+      if (dragRef.current !== drag) return;
+      if (!cancelled) handleMoveStop(drag.stopKey, drag.target);
+      dragRef.current = null;
+      setDraggingStopKey(null);
+    };
+    if (cancelled) finish();
+    else Promise.all(drag.geometry.keys.map(key => previewRows.current.get(key)?.settled)).then(finish);
+  };
+
+  const handleDropOffset = () => {
+    const drag = dragRef.current;
+    return drag ? drag.geometry.dropOffsets[drag.target] : 0;
   };
 
   const handleRemoveStop = (stopKey) => {
@@ -979,7 +1084,8 @@ export default function TripSettingScreen({
     setEditingStopIndex(null);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (savingPlan.current) return;
     const cleanTitle = title.trim() || `Trip Plan ${existingCount + 1}`;
     if (stops.length === 0) {
       Alert.alert(
@@ -989,11 +1095,14 @@ export default function TripSettingScreen({
       return;
     }
 
-    onSavePlan?.({
-      id: initialPlan?.id || `plan-${Date.now()}`,
-      title: cleanTitle,
-      stops,
-    });
+    savingPlan.current = true;
+    try {
+      await onSavePlan?.({
+        id: initialPlan?.id || `plan-${Date.now()}`,
+        title: cleanTitle,
+        stops,
+      });
+    } finally { savingPlan.current = false; }
   };
 
   const hasActiveFilters =
@@ -1112,7 +1221,8 @@ export default function TripSettingScreen({
       </View>
 
       <ScrollView
-        scrollEnabled={scrollEnabled}
+        scrollEnabled={draggingStopKey === null}
+        removeClippedSubviews={false}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -1612,7 +1722,7 @@ export default function TripSettingScreen({
               Urutan Destinasi ({stops.length} Tempat)
             </Text>
             <Text style={styles.helperSubText}>
-              Tahan & geser ikon ⋮⋮ untuk ubah urutan • Ketuk jam untuk ubah waktu
+              Geser ikon ⋮⋮ untuk menukar urutan • Ketuk jam untuk mengubah waktu
             </Text>
           </View>
 
@@ -1621,19 +1731,27 @@ export default function TripSettingScreen({
               Belum ada destinasi. Tekan "Generate Rencana Otomatis" atau pilih secara manual.
             </Text>
           ) : (
-            stops.map((stop, idx) => (
-              <DraggableStopRow
-                key={stop.stopKey}
-                stop={stop}
-                index={idx}
-                totalCount={stops.length}
-                onPressTime={handleOpenStopTimeModal}
-                onRemove={handleRemoveStop}
-                onDragStart={() => setScrollEnabled(false)}
-                onDragEnd={() => setScrollEnabled(true)}
-                onMoveIndex={handleMoveStopIndex}
-              />
-            ))
+            <View style={styles.stopList}>
+              {stops.map((stop, idx) => (
+                <DraggableStopRow
+                  key={stop.stopKey}
+                  stop={stop}
+                  index={idx}
+                  onPressTime={handleOpenStopTimeModal}
+                  onRemove={handleRemoveStop}
+                  onDragStart={handleDragStart}
+                  onDragMove={handleDragMove}
+                  onDragEnd={handleDragEnd}
+                  onDropOffset={handleDropOffset}
+                  onMeasure={(key, layout) => { rowHeights.current[key] = layout.height; }}
+                  onMove={handleMoveStop}
+                  registerPreview={registerPreview}
+                  isDragging={draggingStopKey === stop.stopKey}
+                  isReordering={draggingStopKey !== null}
+                  reduceMotion={reduceMotion}
+                />
+              ))}
+            </View>
           )}
         </View>
 
@@ -2350,6 +2468,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 10,
   },
+  stopList: { overflow: 'hidden' },
   stopEditRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2359,15 +2478,19 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     gap: 7,
   },
+  stopEditRowActiveSlot: { zIndex: 10 },
   stopEditRowDragging: {
     backgroundColor: COLORS.lavenderTint,
     borderRadius: RADIUS.sm,
     elevation: 4,
   },
   dragGripBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 2,
+    minWidth: 40,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  dragGripTouch: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 40 },
   orderBadge: {
     width: 22,
     height: 22,

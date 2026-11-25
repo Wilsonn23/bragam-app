@@ -1,11 +1,12 @@
 const { adaptPois } = require('./adapter');
 const { API_BASE_URL } = require('../config/api');
-const { authFetch } = require('../services/session');
+const session = require('../services/session');
 
-/** Login/register responses carry `{ user, token }`; the token travels with the user to App. */
-function sessionUser(data, fallbackMessage) {
+/** Login/register responses carry `{ user, token }`: keep the token in the session, return the user. */
+function startSession(data, fallbackMessage) {
   if (!data?.user || typeof data.token !== 'string' || !data.token) throw new Error(fallbackMessage);
-  return { ...data.user, token: data.token };
+  session.setToken(data.token);
+  return data.user;
 }
 
 /** @param {{signal?: AbortSignal, fetchImpl?: typeof fetch, baseUrl?: string}} [options] */
@@ -41,7 +42,7 @@ async function loginUser(email, password) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Login gagal (${response.status}).`);
-  return sessionUser(data, 'Response login tidak valid.');
+  return startSession(data, 'Response login tidak valid. Pastikan backend sudah diperbarui.');
 }
 
 async function registerUser(name, email, password) {
@@ -52,7 +53,7 @@ async function registerUser(name, email, password) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Registrasi gagal (${response.status}).`);
-  return sessionUser(data, 'Response registrasi tidak valid.');
+  return startSession(data, 'Response registrasi tidak valid. Pastikan backend sudah diperbarui.');
 }
 
 async function fetchPoiRatings(poiId) {
@@ -63,7 +64,7 @@ async function fetchPoiRatings(poiId) {
 }
 
 async function submitPoiRating(poiId, userId, rating, review) {
-  const response = await authFetch(`${API_BASE_URL}/api/pois/${encodeURIComponent(poiId)}/ratings`, {
+  const response = await session.authFetch(`${API_BASE_URL}/api/pois/${encodeURIComponent(poiId)}/ratings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId, rating, review }),
@@ -77,7 +78,7 @@ async function updatePoiRating(ratingId, rating, review) {
   const body = {};
   if (rating !== undefined) body.rating = rating;
   if (review !== undefined) body.review = review;
-  const response = await authFetch(`${API_BASE_URL}/api/ratings/${encodeURIComponent(ratingId)}`, {
+  const response = await session.authFetch(`${API_BASE_URL}/api/ratings/${encodeURIComponent(ratingId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -88,7 +89,7 @@ async function updatePoiRating(ratingId, rating, review) {
 }
 
 async function deletePoiRating(ratingId) {
-  const response = await authFetch(`${API_BASE_URL}/api/ratings/${encodeURIComponent(ratingId)}`, {
+  const response = await session.authFetch(`${API_BASE_URL}/api/ratings/${encodeURIComponent(ratingId)}`, {
     method: 'DELETE',
   });
   if (!response.ok) {

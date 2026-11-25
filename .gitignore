@@ -3,4 +3,3 @@ node_modules/
 backend/.env
 mobile/.env
 .env
-backend/.auth-secret

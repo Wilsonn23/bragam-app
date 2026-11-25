@@ -1,5 +1,5 @@
 const express = require('express');
-const { requireAuth, requireSelf } = require('../auth');
+const { requireUserSession } = require('../session');
 
 const router = express.Router();
 
@@ -18,7 +18,7 @@ const DEFAULT_PREFERENCES = Object.freeze({
   weights: Object.freeze({ preference: 2, time: 2, location: 2, rating: 2, weather: 2 }),
 });
 
-router.get('/users/:userId/preferences', requireAuth, requireSelf('userId'), async (req, res, next) => {
+router.get('/users/:userId/preferences', requireUserSession, async (req, res, next) => {
   if (!isUuid(req.params.userId)) return res.status(400).json({ error: 'ID user tidak valid.' });
   try {
     const { rows } = await req.db.query(
@@ -32,7 +32,7 @@ router.get('/users/:userId/preferences', requireAuth, requireSelf('userId'), asy
   }
 });
 
-router.put('/users/:userId/preferences', requireAuth, requireSelf('userId'), async (req, res, next) => {
+router.put('/users/:userId/preferences', requireUserSession, async (req, res, next) => {
   if (!isUuid(req.params.userId)) return res.status(400).json({ error: 'ID user tidak valid.' });
   const validation = validatePreferences(req.body);
   if (validation.error) return res.status(400).json({ error: validation.error });

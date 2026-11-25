@@ -42,16 +42,14 @@ Content-Type: application/json
 
 ## Autentikasi
 
-Token ditandatangani dengan secret yang hanya ada di server (tidak ikut ke APK). Tidak perlu
-diatur: saat pertama kali jalan, server membuat secret acak di `backend/.auth-secret`
-(di-gitignore) dan memakainya lagi setelah restart. Isi `AUTH_SECRET` (minimal 32 karakter)
-di `.env` hanya bila ingin menentukan sendiri, misalnya beberapa instance server harus
-berbagi sesi.
-
-Login atau daftar untuk mendapatkan token sesi (berlaku 7 hari):
+Tidak ada secret yang perlu diatur. Login menghasilkan token sesi acak yang disimpan di
+memori backend (`backend/session.js`), berlaku 12 jam, dan bisa dicabut lewat logout.
+Saat backend di-restart semua sesi hilang dan pengguna perlu login lagi. Sesi di memori
+ditujukan untuk satu proses backend; beberapa proses memerlukan penyimpanan sesi bersama.
 
 * `POST /api/auth/login` dengan `{ "email", "password" }` → `{ "user": {...}, "token": "..." }`
 * `POST /api/auth/register` dengan `{ "name", "email", "password" }` → `201 { "user": {...}, "token": "..." }`
+* `POST /api/auth/logout` dengan header `Authorization` → `204`, token tidak berlaku lagi
 
 Endpoint bertanda 🔒 membutuhkan header:
 
@@ -328,6 +326,17 @@ Respons POI kini juga menyertakan `timeCategory`, `environment`, dan `avgDuratio
 | `404` | Data tidak ditemukan |
 | `409` | Email sudah terdaftar |
 | `500` | Query database gagal |
+
+## Trip dan bookmark pengguna
+
+Endpoint 🔒 `/api/users/:userId/trips` dan `/api/users/:userId/bookmarks` memerlukan
+header `Authorization: Bearer <token>` milik user tersebut (lihat **Autentikasi**).
+
+Trip mendukung GET, POST (buat atau perbarui jika ID trip UUID), DELETE
+`/:tripId`, dan POST `/:tripId/stops`. Pembuatan atau penggantian daftar tujuan
+dijalankan dalam transaksi agar kegagalan satu tujuan tidak menyimpan sebagian trip.
+Bookmark mendukung GET, POST, dan DELETE `/:poiId`. Tabel `trips`, `trip_stops`,
+dan `user_bookmarks` harus sudah tersedia di database yang digunakan.
 
 ## POI uji GPS bersama
 

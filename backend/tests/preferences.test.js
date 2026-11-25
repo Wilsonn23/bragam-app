@@ -1,14 +1,13 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-process.env.AUTH_SECRET = 'test-secret-for-preferences-'.padEnd(48, 'x');
 const { createApp } = require('../server');
 const { toPoiResponse } = require('../poiResponse');
-const { signToken } = require('../auth');
+const { createSession } = require('../session');
 
 const userId = '11111111-1111-4111-8111-111111111111';
 const otherUserId = '22222222-2222-4222-8222-222222222222';
-const bearer = (id = userId) => ({ Authorization: `Bearer ${signToken(id)}` });
+const bearer = (id = userId) => ({ Authorization: `Bearer ${createSession(id)}` });
 const get = (url, id = userId) => fetch(url, { headers: bearer(id) });
 const DEFAULTS = {
   interests: [], visitTime: 'auto', environment: 'any', maxBudget: null, hideClosed: true,

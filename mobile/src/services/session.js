@@ -1,5 +1,6 @@
-// In-memory session token for authenticated API calls. Cleared on logout or when the
-// server rejects it (expired/invalid), which also notifies the app to return to login.
+// In-memory session token for authenticated API calls (set by loginUser/registerUser).
+// Cleared on logout, or when the server rejects it (expired/invalid/backend restarted),
+// which also notifies the app so it can return to the login screen.
 
 /** @type {string|null} */
 let token = null;
@@ -7,12 +8,16 @@ let token = null;
 let onUnauthorized = null;
 
 /** @param {unknown} value */
-function setAuthToken(value) {
+function setToken(value) {
   token = typeof value === 'string' && value ? value : null;
 }
 
-function getAuthToken() {
+function getToken() {
   return token;
+}
+
+function clearSession() {
+  token = null;
 }
 
 /** @param {(() => void)|null} handler */
@@ -40,4 +45,4 @@ async function authFetch(url, options = {}, fetchImpl = fetch) {
   return response;
 }
 
-module.exports = { setAuthToken, getAuthToken, setUnauthorizedHandler, authHeaders, authFetch };
+module.exports = { setToken, getToken, clearSession, setUnauthorizedHandler, authHeaders, authFetch };

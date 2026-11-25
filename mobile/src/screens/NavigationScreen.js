@@ -36,6 +36,7 @@ import {
   formatDuration,
 } from '../utils/directionsApi';
 import { useForegroundLocation } from '../hooks/useForegroundLocation';
+import { createRouteRequestTracker } from '../utils/routeRequestTracker';
 
 // Koordinat cadangan di ruas Jl. Braga jika izin GPS belum aktif / di dalam ruangan
 const DEFAULT_USER_ORIGIN = {
@@ -110,7 +111,7 @@ export default function NavigationScreen({
       : 44;
 
   const mapRef = useRef(null);
-  const lastFetchedOriginRef = useRef(null);
+  const routeTracker = useMemo(() => createRouteRequestTracker(haversineMeters), []);
 
   const availablePois = useMemo(() => {
     const source = Array.isArray(pois) && pois.length > 0 ? pois : BRAGA_POIS;
@@ -197,6 +198,7 @@ export default function NavigationScreen({
 
   // State Pop-up "Simpan sebagai Trip"
   const [saveTripModalVisible, setSaveTripModalVisible] = useState(false);
+  const savingTrip = useRef(false);
   const [newTripTitle, setNewTripTitle] = useState('');
 
   // Sinkronkan origin & destination secara berantai saat mode Trip atau Multi-POI aktif
@@ -219,6 +221,9 @@ export default function NavigationScreen({
   // State data rute dari API
   const [routeCoords, setRouteCoords] = useState([]);
   const [routeSteps, setRouteSteps] = useState([]);
+  const [routeError, setRouteError] = useState('');
+  const [routeRetry, setRouteRetry] = useState(0);
+  useEffect(() => () => { routeTracker.dispose(); }, [routeTracker]);
   const [baseDistanceMeters, setBaseDistanceMeters] = useState(0);
   const [baseDurationSeconds, setBaseDurationSeconds] = useState(60);
 
@@ -249,31 +254,15 @@ export default function NavigationScreen({
 
   // Fetch rute jalan kaki berbasis jalan raya/trotoar setiap kali origin/destination berubah signifikan (>12m)
   useEffect(() => {
-    let isMounted = true;
-
-    const prev = lastFetchedOriginRef.current;
     const sameSelectionKey = `${isOriginUser ? 'GPS' : originSelection?.id}->${
       isDestUser ? 'GPS' : destSelection?.id
     }`;
-
-    if (
-      prev &&
-      prev.key === sameSelectionKey &&
-      haversineMeters(prev.origin, activeOriginCoord) < 12 &&
-      haversineMeters(prev.dest, activeDestCoord) < 12
-    ) {
-      return;
-    }
-
-    lastFetchedOriginRef.current = {
-      key: sameSelectionKey,
-      origin: activeOriginCoord,
-      dest: activeDestCoord,
-    };
-
+    const requestId = routeTracker.start(sameSelectionKey, activeOriginCoord, activeDestCoord);
+    if (requestId === null) return;
     fetchWalkingRoute(activeOriginCoord, activeDestCoord, targetText)
       .then((res) => {
-        if (!isMounted) return;
+        if (!routeTracker.isCurrent(requestId)) return;
+        setRouteError('');
         setRouteCoords(res.coordinates);
         setRouteSteps(res.steps || []);
         setBaseDistanceMeters(res.distanceMeters || 0);
@@ -287,39 +276,21 @@ export default function NavigationScreen({
         }
       })
       .catch(() => {
-        if (!isMounted) return;
-        const straightDist = Math.max(
-          10,
-          haversineMeters(activeOriginCoord, activeDestCoord)
-        );
-        const estSec = Math.max(15, Math.round(straightDist / 1.25));
-        setRouteCoords([activeOriginCoord, activeDestCoord]);
-        setBaseDistanceMeters(straightDist);
-        setBaseDurationSeconds(estSec);
-        setRouteSteps([
-          {
-            id: 'fallback-0',
-            instruction: `Jalan lurus di koridor Jl. Braga sejauh ${formatDistance(
-              straightDist
-            )} menuju ${targetText}`,
-            distanceMeters: straightDist,
-            distanceText: formatDistance(straightDist),
-            icon: 'arrow-up',
-            startLocation: activeOriginCoord,
-            endLocation: activeDestCoord,
-          },
-        ]);
+        if (!routeTracker.isCurrent(requestId)) return;
+        setRouteCoords([]);
+        setRouteSteps([]);
+        setBaseDistanceMeters(0);
+        setBaseDurationSeconds(0);
+        setRouteError('Rute belum tersedia. Periksa koneksi lalu pilih kembali tujuan.');
       });
-
-    return () => {
-      isMounted = false;
-    };
   }, [
     activeOriginCoord.latitude,
     activeOriginCoord.longitude,
     activeDestCoord.latitude,
     activeDestCoord.longitude,
     targetText,
+    routeRetry,
+    routeTracker,
   ]);
 
   // Hitung ETA real-time, sisa jarak, dan step aktif saat pengguna berjalan
@@ -503,7 +474,8 @@ export default function NavigationScreen({
   };
 
   // Konfirmasi "Jadikan Trip Baru" -> Hitung jam dari waktu user sekarang + estimasi waktu jalan kaki tiap POI
-  const handleConfirmSaveAdHocTrip = () => {
+  const handleConfirmSaveAdHocTrip = async () => {
+    if (savingTrip.current) return;
     if (adHocStops.length < 2) {
       setSaveTripModalVisible(false);
       return;
@@ -536,12 +508,14 @@ export default function NavigationScreen({
       stops: scheduledStops,
     };
 
-    setSaveTripModalVisible(false);
-    onSaveAsTrip?.(newTripPlan);
-    Alert.alert(
-      'Trip Tersimpan',
-      `"${cleanTitle}" berhasil ditambahkan ke daftar Trip.`
-    );
+    savingTrip.current = true;
+    try {
+      const saved = await onSaveAsTrip?.(newTripPlan);
+      if (saved) {
+        setSaveTripModalVisible(false);
+        Alert.alert('Trip Tersimpan', `"${cleanTitle}" berhasil ditambahkan ke daftar Trip.`);
+      }
+    } finally { savingTrip.current = false; }
   };
 
   const handleRecenter = () => {
@@ -986,7 +960,11 @@ export default function NavigationScreen({
         </View>
 
         {/* Banner Panduan Rute Aktif */}
-        <View style={styles.directionBanner}>
+        {routeError ? (
+          <TouchableOpacity accessibilityRole="button" onPress={() => { routeTracker.retry(); setRouteError(''); setRouteRetry(n => n + 1); }} style={styles.directionBanner}>
+            <Text style={styles.directionInstruction}>{routeError} Ketuk untuk mencoba lagi.</Text>
+          </TouchableOpacity>
+        ) : <View style={styles.directionBanner}>
           <View style={styles.maneuverBadge}>
             <MaterialCommunityIcons
               name={liveNavigation.activeStep?.icon || 'arrow-up'}
@@ -1000,7 +978,7 @@ export default function NavigationScreen({
               {liveNavigation.activeStep?.instruction}
             </Text>
           </View>
-        </View>
+        </View>}
 
         {/* Daftar Lengkap Langkah Belokan (Jika Diketuk) */}
         {showAllSteps && routeSteps.length > 0 && (

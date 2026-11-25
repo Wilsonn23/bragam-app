@@ -18,7 +18,7 @@ module.exports = {
     '/api/auth/login': {
       post: {
         tags: ['Auth'],
-        summary: 'Login dan dapatkan token sesi (berlaku 7 hari)',
+        summary: 'Login dan dapatkan token sesi (berlaku 12 jam)',
         requestBody: {
           required: true,
           content: { 'application/json': { schema: {
@@ -46,6 +46,14 @@ module.exports = {
           400: { $ref: '#/components/responses/ValidationError' },
           409: { description: 'Email sudah terdaftar' },
         },
+      },
+    },
+    '/api/auth/logout': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Logout: cabut token sesi yang dikirim di header Authorization',
+        security: [{ bearerAuth: [] }],
+        responses: { 204: { description: 'Sesi dicabut' } },
       },
     },
     '/health': {
@@ -264,7 +272,7 @@ module.exports = {
       bearerAuth: {
         type: 'http',
         scheme: 'bearer',
-        bearerFormat: 'JWT',
+        bearerFormat: 'opaque session token',
         description: 'Token dari /api/auth/login atau /api/auth/register. ' +
           '401 = token tidak ada/kedaluwarsa, 403 = data milik user lain.',
       },

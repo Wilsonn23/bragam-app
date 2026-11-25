@@ -7,8 +7,8 @@ const authRouter = require('./routes/auth');
 const poisRouter = require('./routes/pois');
 const ratingsRouter = require('./routes/ratings');
 const preferencesRouter = require('./routes/preferences');
+const userDataRouter = require('./routes/userData');
 const openapiSpec = require('./openapi');
-const { authConfigured, secretSource } = require('./auth');
 require('dotenv').config();
 
 function createApp(pool) {
@@ -34,15 +34,15 @@ function createApp(pool) {
   app.use('/api', poisRouter);
   app.use('/api', ratingsRouter);
   app.use('/api', preferencesRouter);
+  app.use('/api/users/:userId', (req, res, next) => {
+    if (/^\/(?:trips|bookmarks)(?:\/|$)/.test(req.path)) return userDataRouter(req, res, next);
+    next();
+  });
   app.use('/api/users', usersRouter);
   app.use('/api/auth', authRouter);
 
   app.use((error, req, res, next) => {
-    if (error.code === 'AUTH_NOT_CONFIGURED') {
-      console.error('Auth is not configured: set AUTH_SECRET (32+ characters) in backend/.env.');
-      return res.status(500).json({ error: 'Autentikasi server belum dikonfigurasi.' });
-    }
-    console.error('Database request failed:', error.code || 'unknown');
+    console.error('Database request failed:', error.code || 'unknown', error.message || '');
     res.status(500).json({ error: 'Database request failed.' });
   });
 
@@ -50,17 +50,10 @@ function createApp(pool) {
 }
 
 if (require.main === module) {
-  // Resolves (and on first run generates) the token secret before serving requests.
-  if (!authConfigured()) {
-    console.warn('WARNING: AUTH_SECRET is set but shorter than 32 characters. ' +
-      'Remove it to use an auto-generated secret, or set a longer one.');
-  } else {
-    console.log(secretSource() === 'env'
-      ? 'Auth: using AUTH_SECRET from environment'
-      : 'Auth: using auto-generated secret (backend/.auth-secret)');
-  }
   const pool = new Pool({ connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined });
+    ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+    // Fail the request with an error instead of hanging forever when the pooler is full/unreachable.
+    connectionTimeoutMillis: 10000 });
   createApp(pool).listen(process.env.PORT || 5000, () => console.log('BRAGAm API server ready'));
 }
 module.exports = { createApp };

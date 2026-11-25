@@ -1,13 +1,12 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-process.env.AUTH_SECRET = 'test-secret-for-ratings-'.padEnd(48, 'x');
 const { createApp } = require('../server');
-const { signToken } = require('../auth');
+const { createSession } = require('../session');
 
 const userId = '11111111-1111-4111-8111-111111111111';
 const otherUserId = '22222222-2222-4222-8222-222222222222';
-const authHeaders = (id = userId) => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${signToken(id)}` });
+const authHeaders = (id = userId) => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${createSession(id)}` });
 
 async function withServer(pool, run) {
   const app = createApp(pool);
@@ -105,7 +104,7 @@ test('rating writes require a valid session', async () => {
     });
     assert.equal(noToken.status, 401);
     const forged = await fetch(`${baseUrl}/api/ratings/7`, {
-      method: 'DELETE', headers: { Authorization: `Bearer ${signToken(userId).slice(0, -2)}xx` },
+      method: 'DELETE', headers: { Authorization: `Bearer ${createSession(userId).slice(0, -2)}xx` },
     });
     assert.equal(forged.status, 401);
     const patch = await fetch(`${baseUrl}/api/ratings/7`, {
