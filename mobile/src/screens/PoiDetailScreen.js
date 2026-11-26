@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image, AppState } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
-import { WireframeImageBox } from '../components/PoiCardComponents';
-import { getOperatingStatus, getPoiDetailFields, getPoiGalleryImages, getRatingStars } from '../poi/presentation';
+import PoiImageGallery from '../components/PoiImageGallery';
+import { getOperatingStatus, getPoiDetailFields, getRatingStars } from '../poi/presentation';
 import { useAppActive, useForegroundLocation } from '../hooks/useForegroundLocation';
 import { distanceMeters } from '../location/distance';
 import { useGuideAudio } from '../audio/AudioProvider';
@@ -26,7 +26,6 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections, isSaved
   const audioLoading = activeAudio && audio.intent && !audioError && (audio.pending || audio.status.isBuffering || (!audio.status.isLoaded && !playing));
   const audioLabel = audioError ? 'Coba lagi' : audioLoading ? 'Memuat audio' : playing ? 'Jeda audio' : activeAudio && audio.status.isLoaded && !audio.status.didJustFinish ? 'Lanjutkan audio' : 'Nyalakan audio';
   const [activeTab, setActiveTab] = useState('Overview');
-  const [failedImages, setFailedImages] = useState([]);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60000);
@@ -46,7 +45,6 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections, isSaved
   const fields = getPoiDetailFields({ ...ratedPoi, distanceMeters: distanceMeters(sample, poi) });
   const reviewCount = Number.isInteger(ratedPoi.reviewsCount) ? ratedPoi.reviewsCount : null;
   const operatingStatus = getOperatingStatus(poi.openingHours, new Date(now));
-  const images = getPoiGalleryImages(poi).filter(uri => !failedImages.includes(uri));
 
   return (
     <SafeAreaView style={styles.root}>
@@ -97,13 +95,10 @@ export default function PoiDetailScreen({ poi, onBack, onOpenDirections, isSaved
             <Text style={styles.outlinePillText}>Add to Itinerary</Text><Ionicons name="add-circle-outline" size={17} color={COLORS.darkPurple} style={{ marginLeft: 4 }} />
           </TouchableOpacity>
         </View>
-        <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryGrid}>
-          {images.length ? images.map((uri, index) => <Image key={uri} source={{ uri }}
-            accessibilityLabel={`Foto ${poi.name} ${index + 1} dari ${images.length}`}
-            onError={() => setFailedImages(previous => [...previous, uri])} style={styles.galleryImage} />) :
-            <WireframeImageBox width={220} height={232} />}
-        </ScrollView>
-        {!images.length && <Text style={styles.galleryCaption}>Foto belum tersedia</Text>}
+        {/* 1 large photo + 2 small stacked; "+N" on the last one opens the full gallery. */}
+        <View style={styles.gallerySection}>
+          <PoiImageGallery poi={poi} />
+        </View>
         <View style={styles.tabsUnderline}>
           <View style={styles.tabsRow}>
             {DETAIL_TABS.map(tab => (
@@ -195,8 +190,7 @@ const styles = StyleSheet.create({
   },
   categoryText: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 4 },
   audioError: { fontSize: 12, color: COLORS.textSecondary, marginHorizontal: 20, marginTop: 6 },
-  galleryImage: { width: 220, height: 232, borderRadius: RADIUS.md, backgroundColor: COLORS.lavenderTint },
-  galleryCaption: { color: COLORS.textSecondary, fontSize: 12, marginHorizontal: 20, marginTop: 6 },
+  gallerySection: { paddingHorizontal: 20, marginTop: 14 },
   disabled: { opacity: 0.45 },
   ratingRow: {
     flexDirection: 'row',
@@ -253,19 +247,6 @@ const styles = StyleSheet.create({
   },
   savedPillBtnActive: { backgroundColor: COLORS.darkPurple, borderColor: COLORS.darkPurple },
   savedPillTextActive: { color: COLORS.white },
-  galleryGrid: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginTop: 14,
-    gap: 10,
-  },
-  leftLargeBox: {
-    flex: 1.35,
-  },
-  rightStackedCol: {
-    flex: 1,
-    gap: 10,
-  },
   tabsUnderline: {
     marginTop: 16,
     borderBottomWidth: 3,
