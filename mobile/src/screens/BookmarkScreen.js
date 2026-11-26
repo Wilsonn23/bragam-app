@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
@@ -16,7 +17,53 @@ import {
 } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 import { WireframeImageBox } from '../components/PoiCardComponents';
-import { getRatingStars } from '../poi/presentation';
+import { getPoiDetailFields, getRatingStars } from '../poi/presentation';
+import { useAppActive, useForegroundLocation } from '../hooks/useForegroundLocation';
+import { distanceMeters } from '../location/distance';
+
+function resolveImageUri(value) {
+  if (typeof value !== 'string' || !/^https?:\/\//i.test(value)) return null;
+  try {
+    const parsed = new URL(value);
+    if (
+      parsed.hostname === 'thumb.wikimedia.org' ||
+      parsed.hostname === 'upload.wikimedia.org'
+    ) {
+      const source = value.replace(/^https?:\/\//i, '').replace(/&/g, '%26');
+      return `https://images.weserv.nl/?url=${source}`;
+    }
+  } catch {
+    return null;
+  }
+  return value;
+}
+
+function getCardImages(poi) {
+  const seen = new Set();
+  const urls = [];
+
+  const push = (raw) => {
+    const uri = resolveImageUri(raw);
+    if (uri && !seen.has(uri)) {
+      seen.add(uri);
+      urls.push(uri);
+    }
+  };
+
+  if (Array.isArray(poi?.images)) {
+    for (const img of poi.images) {
+      push(img?.imageUrl ?? img?.image_url);
+    }
+  }
+  if (Array.isArray(poi?.imageUrls)) {
+    for (const url of poi.imageUrls) {
+      push(url);
+    }
+  }
+  push(poi?.imageUrl ?? poi?.image_url);
+
+  return urls;
+}
 
 export default function BookmarkScreen({
   bookmarkedPois = [],
@@ -26,8 +73,11 @@ export default function BookmarkScreen({
   onRemoveBookmark,
   onAddToItinerary,
 }) {
-  // State untuk menyimpan POI yang sedang dikonfirmasi untuk dihapus (Unsave)
+  const appActive = useAppActive();
+  const { sample } = useForegroundLocation(appActive);
+
   const [poiToUnsave, setPoiToUnsave] = useState(null);
+  const [failedUrls, setFailedUrls] = useState({});
 
   const handleConfirmUnsave = () => {
     if (poiToUnsave) {
@@ -99,27 +149,52 @@ export default function BookmarkScreen({
           contentContainerStyle={styles.listContent}
         >
           {bookmarkedPois.map((poi) => {
-            const distanceLabel =
-              poi.distance || `${poi.triggerRadiusMeters || 15}m`;
-            // Real rating only; no placeholder value or fixed stars.
+            const poiKey = String(poi.id || poi.name);
+            const imageUrls = getCardImages(poi).filter((uri) => !failedUrls[uri]);
+
+            // Hitung jarak GPS live terhadap koordinat POI
+            const currentDistanceMeters = distanceMeters(sample, poi);
+            const detailFields = getPoiDetailFields({
+              ...poi,
+              distanceMeters: currentDistanceMeters,
+            });
+            const distanceLabel = detailFields.distance || '—';
+
             const ratingValue = Number(poi.rating);
             const hasRating = Number.isFinite(ratingValue) && ratingValue > 0;
             const ratingLabel = hasRating ? ratingValue.toFixed(1) : 'Belum ada rating';
 
             return (
-              <View key={String(poi.id || poi.name)} style={styles.card}>
-                {/* Carousel Gambar Placeholder */}
+              <View key={poiKey} style={styles.card}>
+                {/* Carousel Gambar POI dari Database */}
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.carouselRow}
                 >
-                  <WireframeImageBox width={105} height={105} />
-                  <WireframeImageBox width={105} height={105} />
-                  <WireframeImageBox width={105} height={105} />
+                  {imageUrls.length > 0 ? (
+                    imageUrls.map((uri, idx) => (
+                      <Image
+                        key={`${poiKey}-img-${idx}`}
+                        source={{ uri }}
+                        style={styles.poiThumbImage}
+                        resizeMode="cover"
+                        accessibilityLabel={`Foto ${poi.name} ${idx + 1}`}
+                        onError={() =>
+                          setFailedUrls((prev) => ({ ...prev, [uri]: true }))
+                        }
+                      />
+                    ))
+                  ) : (
+                    <>
+                      <WireframeImageBox width={105} height={105} />
+                      <WireframeImageBox width={105} height={105} />
+                      <WireframeImageBox width={105} height={105} />
+                    </>
+                  )}
                 </ScrollView>
 
-                {/* Informasi Utama POI (Seragam dengan PoiDetailFooter di ExploreScreen) */}
+                {/* Informasi Utama POI */}
                 <View style={styles.cardBody}>
                   <View style={styles.infoHeaderRow}>
                     <View style={styles.distanceCol}>
@@ -156,7 +231,7 @@ export default function BookmarkScreen({
                     </View>
                   </View>
 
-                  {/* 4 Tombol Opsi dengan Simbol yang Sama seperti ExploreScreen */}
+                  {/* 4 Tombol Opsi */}
                   <View style={styles.actionsGrid}>
                     <TouchableOpacity
                       activeOpacity={0.85}
@@ -365,6 +440,12 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 10,
   },
+  poiThumbImage: {
+    width: 105,
+    height: 105,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.lavenderTint,
+  },
   cardBody: {
     paddingHorizontal: 14,
   },
@@ -376,6 +457,7 @@ const styles = StyleSheet.create({
   distanceCol: {
     alignItems: 'center',
     marginRight: 10,
+    minWidth: 46,
   },
   pinBadge: {
     width: 30,
@@ -389,6 +471,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textSecondary,
     marginTop: 2,
+    textAlign: 'center',
   },
   titleCol: {
     flex: 1,

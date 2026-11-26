@@ -1,12 +1,14 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  Image,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
   Platform,
   StatusBar,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -16,6 +18,8 @@ import { ContextBanner } from '../components/RecommendationParts';
 import RecommendationCarousel from '../components/RecommendationCarousel';
 
 const HOME_RECOMMENDATION_COUNT = 5;
+const SHEET_HORIZONTAL_PADDING = 20;
+const TRIP_CARD_GAP = 12;
 
 function haversineMeters(a, b) {
   if (!a || !b) return 0;
@@ -85,6 +89,8 @@ export default function HomeScreen({
   onOpenDetail,
   onOpenDirections,
   onOpenBookmarks,
+  onOpenVisitHistory = undefined,
+  onOpenAccount = undefined,
   onToggleSave,
   onAddToItinerary,
   onUseTrip,
@@ -97,6 +103,7 @@ export default function HomeScreen({
   onOpenPreferences = undefined,
 }) {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const topInset =
     insets.top > 0
       ? insets.top
@@ -105,13 +112,22 @@ export default function HomeScreen({
       : 44;
 
   const userName = useMemo(() => resolveUserDisplayName(user), [user]);
+  const avatarUri = user?.avatar_url || user?.avatarUrl || null;
 
   const datasetPois = useMemo(
     () => (Array.isArray(pois) && pois.length > 0 ? pois : BRAGA_POIS),
     [pois]
   );
 
+  // Ukuran kartu dan interval snap untuk swipe carousel Trip
+  const tripCardWidth = Math.max(
+    240,
+    windowWidth - SHEET_HORIZONTAL_PADDING * 2
+  );
+  const tripSnapInterval = tripCardWidth + TRIP_CARD_GAP;
+
   // State indeks carousel Trip & expand daftar stop
+  const tripScrollRef = useRef(null);
   const [tripIndex, setTripIndex] = useState(0);
   const [isTripExpanded, setIsTripExpanded] = useState(true);
 
@@ -119,12 +135,14 @@ export default function HomeScreen({
     if (tripPlans.length === 0) {
       setTripIndex(0);
     } else if (tripIndex >= tripPlans.length) {
-      setTripIndex(tripPlans.length - 1);
+      const clamped = tripPlans.length - 1;
+      setTripIndex(clamped);
+      tripScrollRef.current?.scrollTo({
+        x: clamped * tripSnapInterval,
+        animated: false,
+      });
     }
-  }, [tripPlans.length, tripIndex]);
-
-  const activeTrip = tripPlans[tripIndex] || null;
-  const activeTripStops = activeTrip?.stops || [];
+  }, [tripPlans.length, tripIndex, tripSnapInterval]);
 
   // Rekomendasi kontekstual (preferensi, waktu, lokasi, rating, cuaca) dari engine
   const recommendedItems = useMemo(
@@ -132,14 +150,22 @@ export default function HomeScreen({
     [recommendations]
   );
 
-  const handlePrevTrip = () => {
+  const handleTripScrollEnd = (event) => {
     if (tripPlans.length <= 1) return;
-    setTripIndex((prev) => (prev - 1 + tripPlans.length) % tripPlans.length);
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const nextIdx = Math.round(offsetX / tripSnapInterval);
+    const clampedIdx = Math.max(0, Math.min(tripPlans.length - 1, nextIdx));
+    if (clampedIdx !== tripIndex) {
+      setTripIndex(clampedIdx);
+    }
   };
 
-  const handleNextTrip = () => {
-    if (tripPlans.length <= 1) return;
-    setTripIndex((prev) => (prev + 1) % tripPlans.length);
+  const handleSelectTripDot = (idx) => {
+    setTripIndex(idx);
+    tripScrollRef.current?.scrollTo({
+      x: idx * tripSnapInterval,
+      animated: true,
+    });
   };
 
   return (
@@ -157,15 +183,46 @@ export default function HomeScreen({
           </View>
 
           <View style={styles.headerActions}>
-            <TouchableOpacity activeOpacity={0.8} style={styles.circleIconBtn}>
-              <Ionicons name="notifications" size={20} color={COLORS.darkPurple} />
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={onOpenVisitHistory}
+              style={styles.circleIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Lihat histori kunjungan"
+            >
+              <MaterialCommunityIcons
+                name="history"
+                size={21}
+                color={COLORS.darkPurple}
+              />
             </TouchableOpacity>
+
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={onOpenBookmarks}
               style={styles.circleIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Lihat destinasi tersimpan"
             >
               <Ionicons name="bookmark" size={19} color={COLORS.darkPurple} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={onOpenAccount}
+              style={styles.profileCircleBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Buka pengaturan akun"
+            >
+              {avatarUri ? (
+                <Image
+                  source={{ uri: avatarUri }}
+                  style={styles.profileCircleImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Ionicons name="person" size={19} color={COLORS.darkPurple} />
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -182,168 +239,162 @@ export default function HomeScreen({
             Coba Pakai Rencana Jalan-Jalanmu, Yuk!
           </Text>
 
-          {activeTrip ? (
+          {tripPlans.length > 0 ? (
             <>
-              <View style={styles.carouselWrapper}>
-                {tripPlans.length > 1 && (
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={handlePrevTrip}
-                    style={[styles.carouselArrowBtn, styles.carouselArrowLeft]}
-                    accessibilityLabel="Trip Sebelumnya"
-                  >
-                    <Ionicons
-                      name="chevron-back"
-                      size={18}
-                      color={COLORS.darkPurple}
-                    />
-                  </TouchableOpacity>
-                )}
+              <ScrollView
+                ref={tripScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                decelerationRate="fast"
+                snapToInterval={tripSnapInterval}
+                snapToAlignment="start"
+                disableIntervalMomentum
+                onMomentumScrollEnd={handleTripScrollEnd}
+                style={styles.tripCarouselBleed}
+                contentContainerStyle={styles.tripCarouselContent}
+              >
+                {tripPlans.map((plan, planIdx) => {
+                  const planStops = plan?.stops || [];
+                  return (
+                    <View
+                      key={plan.id || planIdx}
+                      style={[styles.tripCard, { width: tripCardWidth }]}
+                    >
+                      {/* Trip Card Header */}
+                      <View style={styles.tripCardHeader}>
+                        <View style={styles.tripTitleGroup}>
+                          <MaterialCommunityIcons
+                            name="map-marker-path"
+                            size={26}
+                            color={COLORS.darkPurple}
+                          />
+                          <Text style={styles.tripCardTitle} numberOfLines={1}>
+                            {plan.title}
+                          </Text>
+                        </View>
 
-                <View style={styles.tripCard}>
-                  {/* Trip Card Header */}
-                  <View style={styles.tripCardHeader}>
-                    <View style={styles.tripTitleGroup}>
-                      <MaterialCommunityIcons
-                        name="map-marker-path"
-                        size={26}
-                        color={COLORS.darkPurple}
-                      />
-                      <Text style={styles.tripCardTitle} numberOfLines={1}>
-                        {activeTrip.title}
-                      </Text>
-                    </View>
+                        <View style={styles.tripCardButtons}>
+                          <TouchableOpacity
+                            activeOpacity={0.8}
+                            onPress={() => onUseTrip?.(plan)}
+                            style={styles.pakaiBtn}
+                          >
+                            <Text style={styles.pakaiBtnText}>Pakai</Text>
+                            <MaterialCommunityIcons
+                              name="directions"
+                              size={14}
+                              color={COLORS.darkPurple}
+                              style={{ marginLeft: 3 }}
+                            />
+                          </TouchableOpacity>
 
-                    <View style={styles.tripCardButtons}>
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => onUseTrip?.(activeTrip)}
-                        style={styles.pakaiBtn}
-                      >
-                        <Text style={styles.pakaiBtnText}>Pakai</Text>
-                        <MaterialCommunityIcons
-                          name="directions"
-                          size={14}
-                          color={COLORS.darkPurple}
-                          style={{ marginLeft: 3 }}
-                        />
-                      </TouchableOpacity>
+                          <TouchableOpacity
+                            activeOpacity={0.8}
+                            onPress={() => onEditTrip?.(plan)}
+                            style={styles.editBtn}
+                          >
+                            <Text style={styles.editBtnText}>Edit</Text>
+                            <MaterialCommunityIcons
+                              name="pencil-outline"
+                              size={13}
+                              color={COLORS.white}
+                              style={{ marginLeft: 3 }}
+                            />
+                          </TouchableOpacity>
 
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => onEditTrip?.(activeTrip)}
-                        style={styles.editBtn}
-                      >
-                        <Text style={styles.editBtnText}>Edit</Text>
-                        <MaterialCommunityIcons
-                          name="pencil-outline"
-                          size={13}
-                          color={COLORS.white}
-                          style={{ marginLeft: 3 }}
-                        />
-                      </TouchableOpacity>
+                          <TouchableOpacity
+                            activeOpacity={0.7}
+                            onPress={() => setIsTripExpanded((prev) => !prev)}
+                            style={{ paddingLeft: 2 }}
+                          >
+                            <Ionicons
+                              name={
+                                isTripExpanded ? 'chevron-up' : 'chevron-down'
+                              }
+                              size={20}
+                              color={COLORS.darkPurple}
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
 
-                      <TouchableOpacity
-                        activeOpacity={0.7}
-                        onPress={() => setIsTripExpanded((prev) => !prev)}
-                        style={{ paddingLeft: 2 }}
-                      >
-                        <Ionicons
-                          name={isTripExpanded ? 'chevron-up' : 'chevron-down'}
-                          size={20}
-                          color={COLORS.darkPurple}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Trip Stops Timeline */}
-                  {isTripExpanded && (
-                    <View style={styles.tripCardBody}>
-                      {activeTripStops.length === 0 ? (
-                        <Text style={styles.emptyTripStopsText}>
-                          Belum ada destinasi di rencana ini.
-                        </Text>
-                      ) : (
-                        activeTripStops.map((stop, idx) => {
-                          const isLast = idx === activeTripStops.length - 1;
-                          const distLabel = formatStopDistance(
-                            idx > 0 ? activeTripStops[idx - 1] : null,
-                            stop,
-                            datasetPois
-                          );
-                          return (
-                            <View
-                              key={`${activeTrip.id}-${stop.id || idx}-${idx}`}
-                              style={styles.stopRow}
-                            >
-                              {/* Time + Circle Timeline */}
-                              <View style={styles.timelineCol}>
-                                <View style={styles.timeNodeRow}>
-                                  <View style={styles.nodeCircle} />
-                                  <Text style={styles.timeText}>
-                                    {stop.time || '09.00'}
-                                  </Text>
-                                </View>
-                                {!isLast && (
-                                  <View style={styles.dottedConnector} />
-                                )}
-                              </View>
-
-                              {/* Destination Info */}
-                              <View
-                                style={[
-                                  styles.stopInfoBox,
-                                  !isLast && styles.stopDivider,
-                                ]}
-                              >
-                                <View style={styles.smallPinCol}>
-                                  <View style={styles.smallPinCircle}>
-                                    <Ionicons
-                                      name="location"
-                                      size={15}
-                                      color={COLORS.darkPurple}
-                                    />
+                      {/* Trip Stops Timeline */}
+                      {isTripExpanded && (
+                        <View style={styles.tripCardBody}>
+                          {planStops.length === 0 ? (
+                            <Text style={styles.emptyTripStopsText}>
+                              Belum ada destinasi di rencana ini.
+                            </Text>
+                          ) : (
+                            planStops.map((stop, idx) => {
+                              const isLast = idx === planStops.length - 1;
+                              const distLabel = formatStopDistance(
+                                idx > 0 ? planStops[idx - 1] : null,
+                                stop,
+                                datasetPois
+                              );
+                              return (
+                                <View
+                                  key={`${plan.id}-${stop.id || idx}-${idx}`}
+                                  style={styles.stopRow}
+                                >
+                                  {/* Time + Circle Timeline */}
+                                  <View style={styles.timelineCol}>
+                                    <View style={styles.timeNodeRow}>
+                                      <View style={styles.nodeCircle} />
+                                      <Text style={styles.timeText}>
+                                        {stop.time || '09.00'}
+                                      </Text>
+                                    </View>
+                                    {!isLast && (
+                                      <View style={styles.dottedConnector} />
+                                    )}
                                   </View>
-                                  <Text style={styles.smallDistText}>
-                                    {distLabel}
-                                  </Text>
+
+                                  {/* Destination Info */}
+                                  <View
+                                    style={[
+                                      styles.stopInfoBox,
+                                      !isLast && styles.stopDivider,
+                                    ]}
+                                  >
+                                    <View style={styles.smallPinCol}>
+                                      <View style={styles.smallPinCircle}>
+                                        <Ionicons
+                                          name="location"
+                                          size={15}
+                                          color={COLORS.darkPurple}
+                                        />
+                                      </View>
+                                      <Text style={styles.smallDistText}>
+                                        {distLabel}
+                                      </Text>
+                                    </View>
+                                    <Text
+                                      style={styles.stopName}
+                                      numberOfLines={2}
+                                    >
+                                      {stop.name}
+                                    </Text>
+                                  </View>
                                 </View>
-                                <Text style={styles.stopName} numberOfLines={2}>
-                                  {stop.name}
-                                </Text>
-                              </View>
-                            </View>
-                          );
-                        })
+                              );
+                            })
+                          )}
+                        </View>
                       )}
                     </View>
-                  )}
-                </View>
-
-                {tripPlans.length > 1 && (
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={handleNextTrip}
-                    style={[styles.carouselArrowBtn, styles.carouselArrowRight]}
-                    accessibilityLabel="Trip Berikutnya"
-                  >
-                    <Ionicons
-                      name="chevron-forward"
-                      size={18}
-                      color={COLORS.darkPurple}
-                    />
-                  </TouchableOpacity>
-                )}
-              </View>
+                  );
+                })}
+              </ScrollView>
 
               {/* Carousel Dots Dinamis Sesuai Jumlah Trip */}
-              {tripPlans.length > 0 && (
+              {tripPlans.length > 1 && (
                 <View style={styles.dotsRow}>
                   {tripPlans.map((plan, idx) => (
                     <TouchableOpacity
                       key={plan.id || idx}
-                      onPress={() => setTripIndex(idx)}
+                      onPress={() => handleSelectTripDot(idx)}
                       style={[
                         styles.dot,
                         idx === tripIndex && styles.dotActive,
@@ -485,7 +536,8 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
+    gap: 8,
     marginTop: 4,
   },
   circleIconBtn: {
@@ -496,6 +548,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  profileCircleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.lavenderTint,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  profileCircleImage: {
+    width: '100%',
+    height: '100%',
+  },
   sheetContainer: {
     flex: 1,
     backgroundColor: COLORS.white,
@@ -504,7 +571,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   scrollContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SHEET_HORIZONTAL_PADDING,
     paddingTop: 20,
     paddingBottom: 28,
   },
@@ -515,32 +582,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 14,
   },
-  carouselWrapper: {
-    position: 'relative',
-    justifyContent: 'center',
+  tripCarouselBleed: {
+    marginHorizontal: -SHEET_HORIZONTAL_PADDING,
   },
-  carouselArrowBtn: {
-    position: 'absolute',
-    zIndex: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: COLORS.white,
-    borderWidth: 1.5,
-    borderColor: COLORS.primaryPurple,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-  },
-  carouselArrowLeft: {
-    left: -10,
-  },
-  carouselArrowRight: {
-    right: -10,
+  tripCarouselContent: {
+    paddingHorizontal: SHEET_HORIZONTAL_PADDING,
+    gap: TRIP_CARD_GAP,
+    alignItems: 'flex-start',
   },
   tripCard: {
     borderWidth: 1.8,

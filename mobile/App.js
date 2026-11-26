@@ -610,6 +610,11 @@ function MainApp() {
             onOpenDetail={handleOpenDetail}
             onOpenDirections={handleOpenDirections}
             onOpenBookmarks={handleOpenBookmarks}
+            onOpenVisitHistory={() => setSubScreen('VisitHistory')}
+            onOpenAccount={() => {
+              setSubScreen(null);
+              setActiveTab('Account');
+            }}
             onToggleSave={handleToggleSavePoi}
             onAddToItinerary={handleAddToItinerary}
             onUseTrip={handleUseTrip}
@@ -742,8 +747,9 @@ function MainApp() {
       <PoiTriggerModal
         visible={Boolean(visiblePoi)}
         poi={visiblePoi}
+        isSaved={isPoiBookmarked(visiblePoi)}
         onClose={closePoi}
-        onSave={undefined}
+        onSave={handleToggleSavePoi}
         onAddToItinerary={handleAddToItinerary}
         onCheckNow={(poi) => {
           closePoi();
