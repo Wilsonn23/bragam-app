@@ -23,6 +23,8 @@ import { COLORS } from './src/components/theme';
 import { usePois } from './src/poi/PoiProvider';
 import { useAppActive, useForegroundLocation } from './src/hooks/useForegroundLocation';
 import { usePoiTriggers } from './src/hooks/usePoiTriggers';
+import VisitHistoryScreen from './src/screens/VisitHistoryScreen';
+import UserReviewsScreen from './src/screens/UserReviewsScreen';
 import {
   fetchUserBookmarks,
   toggleUserBookmark,
@@ -30,6 +32,8 @@ import {
   saveUserTripPlan,
   appendStopToExistingTrip,
   deleteUserTripPlan,
+  fetchUserVisits,
+  recordUserVisit,
   logoutUser,
 } from './src/services/userDataService';
 import { applyRatingOverrides } from './src/poi/ratings';
@@ -75,6 +79,7 @@ function MainApp() {
   useEffect(() => {
     setUnauthorizedHandler(() => {
       setPreferences(DEFAULT_PREFERENCES);
+      setVisitedPois([]);
       setCurrentUser(null);
       Alert.alert('Sesi berakhir', 'Silakan login kembali untuk melanjutkan.');
     });
@@ -94,6 +99,9 @@ function MainApp() {
   // State daftar POI yang disimpan ke Bookmark (dimuat dari Supabase)
   const [bookmarkedPois, setBookmarkedPois] = useState([]);
 
+  // State daftar POI yang sudah dikunjungi user (dimuat dari Supabase)
+  const [visitedPois, setVisitedPois] = useState([]);
+
   // State POI yang sedang akan ditambahkan ke Trip melalui AddToTripModal
   const [poiToAddTrip, setPoiToAddTrip] = useState(null);
 
@@ -104,7 +112,7 @@ function MainApp() {
   const [fullHeight, setFullHeight] = useState(0);
   const [currentHeight, setCurrentHeight] = useState(0);
 
-  // Muat data Bookmark & Trip user dari Supabase saat login / dataset POI siap
+  // Muat data Bookmark, Trip & Histori Kunjungan user dari Supabase saat login / dataset POI siap
   useEffect(() => {
     let isMounted = true;
     const userId = currentUser?.id;
@@ -113,6 +121,7 @@ function MainApp() {
       if (!userId) {
         setTripPlans([]);
         setBookmarkedPois([]);
+        setVisitedPois([]);
       }
       return;
     }
@@ -120,11 +129,13 @@ function MainApp() {
     Promise.all([
       fetchUserBookmarks(userId, pois),
       fetchUserTrips(userId, pois),
+      fetchUserVisits(userId, pois),
     ])
-      .then(([loadedBookmarks, loadedTrips]) => {
+      .then(([loadedBookmarks, loadedTrips, loadedVisits]) => {
         if (!isMounted) return;
         setBookmarkedPois(loadedBookmarks);
         setTripPlans(loadedTrips);
+        setVisitedPois(loadedVisits);
       })
       .catch((err) => {
         console.warn('Gagal memuat data user dari Supabase:', err?.message || err);
@@ -142,6 +153,55 @@ function MainApp() {
         (targetPoi.id && String(item.id) === String(targetPoi.id)) ||
         item.name?.toLowerCase() === targetPoi.name?.toLowerCase()
     );
+  };
+
+  const isPoiVisited = (targetPoi) => {
+    if (!targetPoi) return false;
+    return visitedPois.some(
+      (item) =>
+        (targetPoi.id && String(item.poiId ?? item.id) === String(targetPoi.id)) ||
+        (item.poiName ?? item.name)?.toLowerCase() === targetPoi.name?.toLowerCase()
+    );
+  };
+
+  const handleMarkVisited = async (targetPoi, visitRecord) => {
+    if (!targetPoi || !currentUser?.id) return;
+    const alreadyVisited = isPoiVisited(targetPoi);
+
+    const normalizedRecord = visitRecord || {
+      poiId: String(targetPoi.id),
+      poiName: targetPoi.name,
+      category: targetPoi.category || '',
+      imageUrl: targetPoi.images?.[0]?.imageUrl || targetPoi.imageUrl || null,
+      visitedAt: new Date().toISOString(),
+      distanceMeters: null,
+    };
+
+    if (!alreadyVisited) {
+      setVisitedPois((prev) => [normalizedRecord, ...prev]);
+    }
+
+    try {
+      const saved = await recordUserVisit(
+        currentUser.id,
+        targetPoi.id,
+        normalizedRecord.distanceMeters
+      );
+      if (saved?.visited_at) {
+        setVisitedPois((prev) =>
+          prev.map((item) =>
+            String(item.poiId ?? item.id) === String(targetPoi.id)
+              ? { ...item, visitedAt: saved.visited_at }
+              : item
+          )
+        );
+      }
+    } catch (err) {
+      Alert.alert(
+        'Gagal Menyimpan Kunjungan',
+        err?.message || 'Tidak dapat menyimpan riwayat kunjungan ke database.'
+      );
+    }
   };
 
   const handleToggleSavePoi = async (targetPoi) => {
@@ -206,7 +266,7 @@ function MainApp() {
     const currentCount = targetTrip?.stops?.length || 0;
 
     try {
-      await appendStopToExistingTrip(currentUser.id,tripId, newStop, currentCount);
+      await appendStopToExistingTrip(currentUser.id, tripId, newStop, currentCount);
       setTripPlans((prev) => prev.map(plan => plan.id === tripId
         ? { ...plan, stops: [...(plan.stops || []), newStop] } : plan));
       Alert.alert(
@@ -316,6 +376,7 @@ function MainApp() {
   const handleLogout = () => {
     logoutUser();
     setPreferences(DEFAULT_PREFERENCES);
+    setVisitedPois([]);
     setCurrentUser(null);
   };
 
@@ -418,6 +479,8 @@ function MainApp() {
         <PoiDetailScreen
           poi={selectedPoi}
           isSaved={isPoiBookmarked(selectedPoi)}
+          isVisited={isPoiVisited(selectedPoi)}
+          onMarkVisited={handleMarkVisited}
           onToggleSave={handleToggleSavePoi}
           onAddToItinerary={handleAddToItinerary}
           onBack={() => setSubScreen(null)}
@@ -513,6 +576,28 @@ function MainApp() {
         />
       );
     }
+    
+    if (subScreen === 'VisitHistory') {
+      return (
+        <VisitHistoryScreen
+          visitedPois={visitedPois}
+          onBack={() => setSubScreen(null)}
+          onOpenDetail={handleOpenDetail}
+          onOpenDirections={handleOpenDirections}
+          onAddToItinerary={handleAddToItinerary}
+        />
+      );
+    }
+    if (subScreen === 'UserReviews') {
+      return (
+        <UserReviewsScreen
+          user={currentUser}
+          allPois={pois}
+          onBack={() => setSubScreen(null)}
+          onOpenDetail={handleOpenDetail}
+        />
+      );
+    }
 
     switch (activeTab) {
       case 'Home':
@@ -571,8 +656,14 @@ function MainApp() {
         return (
           <AccountScreen
             user={currentUser}
+            visitedPois={visitedPois}
             onLogout={handleLogout}
             onOpenPreferences={handleOpenPreferences}
+            onOpenVisitHistory={() => setSubScreen('VisitHistory')}
+            onOpenUserReviews={() => setSubScreen('UserReviews')}
+            onUpdateUser={(updatedFields) =>
+              setCurrentUser((prev) => (prev ? { ...prev, ...updatedFields } : prev))
+            }
           />
         );
       default:
