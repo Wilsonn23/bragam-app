@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
@@ -23,7 +24,6 @@ import * as Location from 'expo-location';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../components/theme';
 import { PoiDetailFooter } from '../components/PoiCardComponents';
-import PoiImageGallery from '../components/PoiImageGallery';
 import SearchPoiOverlay from '../components/SearchPoiOverlay';
 import {
   BRAGA_REGION,
@@ -60,6 +60,76 @@ const RATING_OPTIONS = [
   { label: '3+ ★', value: '3' },
   { label: '4+ ★', value: '4' },
 ];
+
+function resolveExploreImageUri(value) {
+  if (typeof value !== 'string' || !/^https?:\/\//i.test(value)) return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.hostname === 'thumb.wikimedia.org' || parsed.hostname === 'upload.wikimedia.org') {
+      const source = value.replace(/^https?:\/\//i, '').replace(/&/g, '%26');
+      return `https://images.weserv.nl/?url=${source}`;
+    }
+  } catch {
+    return null;
+  }
+  return value;
+}
+
+function getAllPoiImageItems(poi) {
+  const seen = new Set();
+  const items = [];
+
+  const pushItem = (rawUrl, altText) => {
+    const uri = resolveExploreImageUri(rawUrl);
+    if (!uri || seen.has(uri)) return;
+    seen.add(uri);
+    items.push({
+      uri,
+      altText: typeof altText === 'string' && altText.trim() ? altText.trim() : null,
+    });
+  };
+
+  if (Array.isArray(poi?.images)) {
+    for (const img of poi.images) {
+      pushItem(img?.imageUrl ?? img?.image_url, img?.altText ?? img?.alt_text);
+    }
+  }
+  if (Array.isArray(poi?.imageUrls)) {
+    for (const url of poi.imageUrls) {
+      pushItem(url, null);
+    }
+  }
+  pushItem(poi?.imageUrl, null);
+
+  return items;
+}
+
+function PoiCompactImageRow({ poi }) {
+  const items = useMemo(() => getAllPoiImageItems(poi), [poi]);
+  const [failedUris, setFailedUris] = useState([]);
+  const availableItems = items.filter((item) => !failedUris.includes(item.uri));
+
+  if (!availableItems.length) {
+    return <View style={styles.compactPlaceholder} />;
+  }
+
+  return (
+    <View style={styles.compactRow}>
+      {availableItems.map((item, index) => (
+        <Image
+          key={item.uri}
+          source={{ uri: item.uri }}
+          style={styles.compactImage}
+          resizeMode="cover"
+          accessibilityLabel={item.altText || `Foto ${poi?.name || 'POI'} ${index + 1}`}
+          onError={() =>
+            setFailedUris((prev) => (prev.includes(item.uri) ? prev : [...prev, item.uri]))
+          }
+        />
+      ))}
+    </View>
+  );
+}
 
 // Mengecek apakah titik GPS pengguna berada di dalam poligon ungu Jl. Braga (Ray-Casting)
 function isPointInPolygon(point, polygon) {
@@ -132,10 +202,18 @@ function normalizePoiItem(item, userCoord = null, existingPois = []) {
     ? parentPoi.distance
     : 'Jarak belum tersedia';
 
+  const resolvedImages =
+    Array.isArray(item.images) && item.images.length > 0
+      ? item.images
+      : Array.isArray(parentPoi?.images)
+      ? parentPoi.images
+      : [];
+
   return {
     ...localMeta,
     ...parentPoi,
     ...item,
+    images: resolvedImages,
     latitude: validLat,
     longitude: validLng,
     coordinate: {
@@ -692,7 +770,7 @@ export default function ExploreScreen({
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.carouselRow}
                 >
-                  <PoiImageGallery poi={poi} compact />
+                  <PoiCompactImageRow poi={poi} />
                 </ScrollView>
 
                 <View style={{ paddingHorizontal: 20 }}>
@@ -1001,6 +1079,22 @@ const styles = StyleSheet.create({
   carouselRow: {
     paddingHorizontal: 20,
     gap: 10,
+  },
+  compactRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  compactImage: {
+    width: 105,
+    height: 105,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.lavenderTint,
+  },
+  compactPlaceholder: {
+    width: 105,
+    height: 105,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.lavenderTint,
   },
   dropdownBackdrop: {
     ...StyleSheet.absoluteFill,
