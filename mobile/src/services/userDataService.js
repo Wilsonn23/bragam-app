@@ -139,3 +139,59 @@ export async function deleteUserTripPlan(userId, tripId) {
     method: 'DELETE',
   });
 }
+
+// ==========================================
+// 3. VISITED HISTORY
+// ==========================================
+export async function fetchUserVisits(userId, allPois = []) {
+  if (!userId) return [];
+
+  const rows = await apiRequest(`/api/users/${userId}/visits`);
+
+  return (rows || []).map((row) => {
+    const poiMeta = allPois.find((p) => String(p.id) === String(row.poi_id));
+    return {
+      ...(poiMeta || {}),
+      poiId: String(row.poi_id),
+      poiName: poiMeta?.name || `POI #${row.poi_id}`,
+      category: poiMeta?.category || '',
+      imageUrl: poiMeta?.images?.[0]?.imageUrl || poiMeta?.imageUrl || null,
+      distanceMeters: row.distance_meters ?? null,
+      visitedAt: row.visited_at,
+    };
+  });
+}
+
+export async function recordUserVisit(userId, poiId, distanceMeters = null) {
+  if (!userId || !poiId) return null;
+
+  return await apiRequest(`/api/users/${userId}/visits`, {
+    method: 'POST',
+    body: JSON.stringify({
+      poiId: String(poiId),
+      distanceMeters: Number.isFinite(distanceMeters) ? Math.round(distanceMeters) : null,
+    }),
+  });
+}
+
+// ==========================================
+// 4. USER PROFILE & PASSWORD
+// ==========================================
+export async function updateUserProfile(userId, updates) {
+  if (!userId) throw new Error('User belum login.');
+  return await apiRequest(`/api/users/${encodeURIComponent(String(userId))}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function changeUserPassword(userId, oldPassword, newPassword) {
+  if (!userId) throw new Error('User belum login.');
+  return await apiRequest(`/api/users/${encodeURIComponent(String(userId))}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      oldPassword,
+      password: newPassword,
+    }),
+  });
+}
