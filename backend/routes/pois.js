@@ -200,6 +200,36 @@ router.get('/pois/:id/images', async (req, res, next) => {
   }
 });
 
+router.get('/pois/:id/menu', async (req, res, next) => {
+  try {
+    const testPoi = await loadLocalTestPoi(req.db);
+    const isLocal = testPoi?.id === req.params.id;
+    if (isLocal && !testPoi.source_poi_id) return res.json([]);
+    const menuPoiId = isLocal ? testPoi.source_poi_id : req.params.id;
+    const result = await req.db.query(`
+      SELECT id, category, name, description, price_idr, source, source_url,
+             to_char(checked_on, 'YYYY-MM-DD') AS checked_on
+      FROM poi_menu_items
+      WHERE poi_id = $1
+      ORDER BY sort_order ASC, id ASC
+    `, [menuPoiId]);
+
+    res.json(result.rows.map((item) => ({
+      id: String(item.id),
+      poiId: req.params.id,
+      category: item.category,
+      name: item.name,
+      description: item.description || null,
+      priceIdr: item.price_idr === null || item.price_idr === undefined ? null : Number(item.price_idr),
+      source: item.source,
+      sourceUrl: item.source_url || null,
+      checkedOn: item.checked_on || null,
+    })));
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/pois/:id', async (req, res, next) => {
   try {
     const testPoi = await loadLocalTestPoi(req.db);

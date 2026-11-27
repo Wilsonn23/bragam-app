@@ -141,6 +141,37 @@ Response jika ditemukan:
 
 Jika tidak ada POI dalam radius, response adalah `null`.
 
+### `GET /api/pois/:id/menu`
+
+Daftar menu satu POI dari tabel `poi_menu_items`, urut sesuai `sort_order`. POI tanpa
+data menu (atau yang bukan tempat makan) mengembalikan `[]`. `priceIdr` bernilai `null`
+jika item diketahui tetapi harganya belum ditemukan. `source`, `sourceUrl`, dan
+`checkedOn` menunjukkan asal data; harga dari GoFood biasanya lebih tinggi daripada
+harga di toko.
+
+```bash
+curl http://localhost:5000/api/pois/P02/menu
+```
+
+```json
+[
+  {
+    "id": "1",
+    "poiId": "P02",
+    "category": "Kopi",
+    "name": "Es Kopi Toko Djawa",
+    "description": "Kopi susu dingin dengan gula djawa; hanya tersedia dingin.",
+    "priceIdr": 26000,
+    "source": "GoFood Kopi Toko Djawa Braga",
+    "sourceUrl": "https://gofood.co.id/en/bandung/restaurant/kopi-toko-djawa-braga-4d5a813e-0f98-4f75-8b76-2b714e120652",
+    "checkedOn": "2026-11-27"
+  }
+]
+```
+
+Data menu dibuat lewat `migrations/20261127_poi_menu_items.sql` lalu diisi dengan
+`seeds/poi_menu_items.sql`.
+
 ## Users
 
 CRUD user tersedia di `/api/users`. Password tidak pernah dikembalikan oleh API. Saat create atau update, password di-hash menjadi `password_hash` menggunakan bcrypt.

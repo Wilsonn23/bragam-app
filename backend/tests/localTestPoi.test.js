@@ -79,6 +79,7 @@ test('Citywalk clone keeps original data, gallery, audio identity and geofence b
       assert.deepEqual(values,['P11']);return {rows:[source]};
     }
     if(sql.includes('FROM poi_images')){assert.ok(values[0]==='P11'||values[0].includes('P11'));return {rows:images};}
+    if(sql.includes('FROM poi_menu_items')){assert.deepEqual(values,['P11']);return {rows:[{id:7,category:'Kopi',name:'Es Kopi',description:null,price_idr:25000,source:'Uji',source_url:null,checked_on:'2026-11-27'}]};}
     // Real user ratings for the source; the seeded 4.6/1800 on the row must not be used.
     if(sql.includes('FROM poi_ratings')){assert.ok(values[0].includes('P11'));return {rows:[{poi_id:'P11',average_rating:'4.2',review_count:'3'}]};}
     if(sql.includes('SELECT DISTINCT'))return {rows:[{category:source.category}]};
@@ -96,6 +97,7 @@ test('Citywalk clone keeps original data, gallery, audio identity and geofence b
   assert.equal(clone.images[0].imageUrl,images[0].image_url);
   const detail=await get('/pois/TEST-LOCAL');assert.equal(detail.id,clone.id);assert.equal(detail.images[0].imageUrl,clone.images[0].imageUrl);
   const gallery=await get('/pois/TEST-LOCAL/images');assert.equal(gallery[0].poiId,'TEST-LOCAL');assert.equal(gallery[0].imageUrl,clone.images[0].imageUrl);
+  const menu=await get('/pois/TEST-LOCAL/menu');assert.equal(menu[0].poiId,'TEST-LOCAL');assert.equal(menu[0].name,'Es Kopi');assert.equal(menu[0].priceIdr,25000);
   assert.equal((await get('/pois/nearby?latitude=-6.890389&longitude=107.609583')).id,'TEST-LOCAL');
   assert.equal((await get('/pois/search?q=CityWalk')).data.filter(p=>p.id==='TEST-LOCAL').length,1);
   assert.equal((await get('/categories')).categories.includes('Hiburan'),true);

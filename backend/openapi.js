@@ -106,6 +106,40 @@ module.exports = {
         },
       },
     },
+    '/api/pois/{poiId}/menu': {
+      parameters: [{ $ref: '#/components/parameters/PoiId' }],
+      get: {
+        tags: ['POI'],
+        summary: 'Ambil daftar menu POI',
+        responses: {
+          200: {
+            description: 'Item menu urut sort_order; [] jika POI belum punya data menu',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string', example: '1' },
+                      poiId: { type: 'string', example: 'P02' },
+                      category: { type: 'string', example: 'Kopi' },
+                      name: { type: 'string', example: 'Es Kopi Toko Djawa' },
+                      description: { type: 'string', nullable: true },
+                      priceIdr: { type: 'integer', nullable: true, example: 26000 },
+                      source: { type: 'string', example: 'GoFood Kopi Toko Djawa Braga' },
+                      sourceUrl: { type: 'string', nullable: true },
+                      checkedOn: { type: 'string', format: 'date', example: '2026-11-27' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          500: { $ref: '#/components/responses/DatabaseError' },
+        },
+      },
+    },
     '/api/pois/{poiId}/ratings': {
       parameters: [{ $ref: '#/components/parameters/PoiId' }],
       get: {

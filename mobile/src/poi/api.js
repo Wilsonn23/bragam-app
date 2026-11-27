@@ -34,6 +34,22 @@ async function fetchPoiImages(id) {
   return Array.isArray(data) ? data : [];
 }
 
+/** Menu items of one POI; [] when the POI has no menu data. */
+async function fetchPoiMenu(poiId, { fetchImpl = fetch, baseUrl = API_BASE_URL } = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetchImpl(`${baseUrl.replace(/\/+$/, '')}/api/pois/${encodeURIComponent(poiId)}/menu`,
+      { signal: controller.signal });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.error || `Gagal mengambil menu (${response.status}).`);
+    if (!Array.isArray(data)) throw new Error('Respons menu tidak valid.');
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function loginUser(email, password) {
   const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
     method: 'POST',
@@ -108,6 +124,7 @@ async function fetchUserRatings(userId) {
 module.exports = {
   fetchPois,
   fetchPoiImages,
+  fetchPoiMenu,
   loginUser,
   registerUser,
   fetchPoiRatings,

@@ -63,6 +63,27 @@ for (const path of ['/api/pois', '/api/pois/P01', '/api/pois/nearby?latitude=-6.
   assert.deepEqual(imageQuery.params,[['P01']]);
  });
 }
+test('HTTP /api/pois/:id/menu returns ordered menu items with nullable price and source', async t => {
+ const queries=[];
+ const app=createApp({query:async(sql, params)=>{
+  queries.push({sql, params});
+  return {rows:[
+   {id:'3', category:'Kopi', name:'Es Kopi Awan', description:'Dengan foam', price_idr:31200, source:'GoFood', source_url:'https://example.invalid/menu', checked_on:'2026-11-27'},
+   {id:'4', category:'Kue', name:'Kue tanpa harga', description:null, price_idr:null, source:'Artikel', source_url:null, checked_on:'2026-11-27'},
+  ]};
+ }});
+ const server=app.listen(0,'127.0.0.1');t.after(()=>server.close());
+ await new Promise(resolve=>server.once('listening',resolve));
+ const response=await fetch(`http://127.0.0.1:${server.address().port}/api/pois/P02/menu`);
+ assert.equal(response.status,200);
+ assert.deepEqual(await response.json(),[
+  {id:'3', poiId:'P02', category:'Kopi', name:'Es Kopi Awan', description:'Dengan foam', priceIdr:31200, source:'GoFood', sourceUrl:'https://example.invalid/menu', checkedOn:'2026-11-27'},
+  {id:'4', poiId:'P02', category:'Kue', name:'Kue tanpa harga', description:null, priceIdr:null, source:'Artikel', sourceUrl:null, checkedOn:'2026-11-27'},
+ ]);
+ const menuQuery=queries.find(q=>/FROM poi_menu_items/.test(q.sql));
+ assert.deepEqual(menuQuery.params,['P02']);
+ assert.match(menuQuery.sql,/ORDER BY sort_order/);
+});
 test('database errors return HTTP error, never synthetic POIs', async t => {
  const app=createApp({query:async()=>{throw {code:'TEST_ERROR'};}});const server=app.listen(0,'127.0.0.1');t.after(()=>server.close());
  await new Promise(resolve=>server.once('listening',resolve));
