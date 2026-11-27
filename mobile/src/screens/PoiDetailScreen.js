@@ -19,6 +19,7 @@ import { useGuideAudio } from '../audio/AudioProvider';
 import { audioSourceFor, bundledAudioFor, AUDIO_ERROR } from '../audio/guideController';
 import { POI_AUDIO_ASSETS } from '../audio/guideAssets';
 import PoiRatingSection from '../components/PoiRatingSection';
+import PoiMenuSection from '../components/PoiMenuSection';
 import { fetchUserVisits, recordUserVisit } from '../services/userDataService';
 
 const DETAIL_TABS = ['Overview', 'Menu', 'Review', 'About'];
@@ -329,6 +330,8 @@ export default function PoiDetailScreen({
         </View>
         {activeTab === 'Review' ? (
           <PoiRatingSection poi={poi} currentUser={currentUser} onSummaryChange={handleSummaryChange} />
+        ) : activeTab === 'Menu' ? (
+          <PoiMenuSection key={poi.id} poi={poi} priceSummary={fields.prices} />
         ) : (
           <View style={styles.overviewList}>
             {activeTab === 'Overview' && <>
@@ -336,10 +339,6 @@ export default function PoiDetailScreen({
               <DetailRow icon="location-outline" value={fields.address} />
               <DetailRow icon="time-outline" value={operatingStatus ? `${operatingStatus}  |  ${fields.openingHours}` : fields.openingHours} />
               <DetailRow icon="globe-outline" value={fields.website} />
-            </>}
-            {activeTab === 'Menu' && <>
-              <DetailRow icon="restaurant-outline" value={fields.menu} />
-              <DetailRow icon="pricetag-outline" value={fields.prices} />
             </>}
             {activeTab === 'About' && <DetailRow icon="book-outline" value={fields.history} />}
           </View>
