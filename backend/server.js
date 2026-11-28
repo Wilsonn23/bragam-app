@@ -49,11 +49,28 @@ function createApp(pool) {
   return app;
 }
 
-if (require.main === module) {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL,
+function createPool() {
+  return new Pool({ connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
     // Fail the request with an error instead of hanging forever when the pooler is full/unreachable.
-    connectionTimeoutMillis: 10000 });
-  createApp(pool).listen(process.env.PORT || 5000, () => console.log('BRAGAm API server ready'));
+    connectionTimeoutMillis: 10000,
+    // Serverless platforms (Vercel) run many small instances; keep each one's pool tiny.
+    max: process.env.VERCEL ? 3 : 10 });
 }
-module.exports = { createApp };
+
+// `node server.js` (local / Render / Railway): run a long-lived HTTP server.
+if (require.main === module) {
+  createApp(createPool()).listen(process.env.PORT || 5000, () => console.log('BRAGAm API server ready'));
+}
+
+// Vercel imports this file instead and needs the app (a request handler) as the default
+// export. The app and its pool are created on the first request, so tests that only
+// import createApp never open a database pool.
+let serverlessApp;
+function handler(req, res) {
+  serverlessApp = serverlessApp || createApp(createPool());
+  return serverlessApp(req, res);
+}
+
+module.exports = handler;
+module.exports.createApp = createApp;
