@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   Pressable,
@@ -20,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from './theme';
 import { WireframeImageBox } from './PoiCardComponents';
+import { BRAGA_POIS } from '../constants/bragaMapData';
 import { API_BASE_URL } from '../config/api';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -51,6 +53,96 @@ const RATING_OPTIONS = [
   { label: '3+ ★', value: '3' },
   { label: '4+ ★', value: '4' },
 ];
+
+function resolveSearchImageUri(value) {
+  if (typeof value !== 'string' || !/^https?:\/\//i.test(value)) return null;
+  try {
+    const parsed = new URL(value);
+    if (
+      parsed.hostname === 'thumb.wikimedia.org' ||
+      parsed.hostname === 'upload.wikimedia.org'
+    ) {
+      const source = value.replace(/^https?:\/\//i, '').replace(/&/g, '%26');
+      return `https://images.weserv.nl/?url=${source}`;
+    }
+  } catch {
+    return null;
+  }
+  return value;
+}
+
+function getPrimaryPoiImage(poi, fallbackPois = []) {
+  const localMeta = BRAGA_POIS.find((b) => String(b.id) === String(poi?.id));
+  const parentPoi = fallbackPois.find((p) => String(p.id) === String(poi?.id));
+
+  const candidates = [];
+
+  const collectFrom = (source) => {
+    if (!source) return;
+    if (Array.isArray(source.images)) {
+      for (const img of source.images) {
+        candidates.push({
+          rawUrl: img?.imageUrl ?? img?.image_url,
+          altText: img?.altText ?? img?.alt_text,
+        });
+      }
+    }
+    if (Array.isArray(source.imageUrls)) {
+      for (const url of source.imageUrls) {
+        candidates.push({ rawUrl: url, altText: null });
+      }
+    }
+    candidates.push({
+      rawUrl: source.imageUrl ?? source.image_url,
+      altText: null,
+    });
+  };
+
+  collectFrom(poi);
+  collectFrom(parentPoi);
+  collectFrom(localMeta);
+
+  for (const item of candidates) {
+    const uri = resolveSearchImageUri(item.rawUrl);
+    if (uri) {
+      return {
+        uri,
+        altText:
+          typeof item.altText === 'string' && item.altText.trim()
+            ? item.altText.trim()
+            : null,
+      };
+    }
+  }
+
+  return null;
+}
+
+function SearchPoiThumbnail({ poi, fallbackPois }) {
+  const imageItem = useMemo(
+    () => getPrimaryPoiImage(poi, fallbackPois),
+    [poi, fallbackPois]
+  );
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [imageItem?.uri]);
+
+  if (!imageItem?.uri || hasError) {
+    return <WireframeImageBox width={82} height={82} />;
+  }
+
+  return (
+    <Image
+      source={{ uri: imageItem.uri }}
+      style={styles.poiThumbnail}
+      resizeMode="cover"
+      accessibilityLabel={imageItem.altText || `Foto ${poi?.name || 'POI'}`}
+      onError={() => setHasError(true)}
+    />
+  );
+}
 
 function formatRupiahNumber(val) {
   const num = Number(val) || 0;
@@ -246,6 +338,7 @@ function BudgetRangeSlider({ minVal, maxVal, onChangeRange }) {
 
 export default function SearchPoiOverlay({
   visible,
+  pois: fallbackPois = [],
   onClose,
   onSelectPoi,
 }) {
@@ -337,34 +430,36 @@ export default function SearchPoiOverlay({
     }
   }, [visible]);
 
-  const panResponder = useMemo(() =>
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
-      onPanResponderGrant: () => {
-        Keyboard.dismiss();
-      },
-      onPanResponderMove: (_, gesture) => {
-        const nextHeight = currentHeight - gesture.dy;
-        if (nextHeight >= COLLAPSED_HEIGHT - 70 && nextHeight <= EXPANDED_HEIGHT + 20) {
-          sheetHeight.setValue(nextHeight);
-        }
-      },
-      onPanResponderRelease: (_, gesture) => {
-        if (!isExpanded && gesture.dy > 55) {
-          handleClose();
-          return;
-        }
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
+        onPanResponderGrant: () => {
+          Keyboard.dismiss();
+        },
+        onPanResponderMove: (_, gesture) => {
+          const nextHeight = currentHeight - gesture.dy;
+          if (nextHeight >= COLLAPSED_HEIGHT - 70 && nextHeight <= EXPANDED_HEIGHT + 20) {
+            sheetHeight.setValue(nextHeight);
+          }
+        },
+        onPanResponderRelease: (_, gesture) => {
+          if (!isExpanded && gesture.dy > 55) {
+            handleClose();
+            return;
+          }
 
-        if (gesture.dy < -40) {
-          animateSheet(true);
-        } else if (gesture.dy > 40) {
-          animateSheet(false);
-        } else {
-          animateSheet(currentHeight > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
-        }
-      },
-    })
-  , [currentHeight, isExpanded, sheetHeight, onClose]);
+          if (gesture.dy < -40) {
+            animateSheet(true);
+          } else if (gesture.dy > 40) {
+            animateSheet(false);
+          } else {
+            animateSheet(currentHeight > (COLLAPSED_HEIGHT + EXPANDED_HEIGHT) / 2);
+          }
+        },
+      }),
+    [currentHeight, isExpanded, sheetHeight, onClose]
+  );
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/categories`)
@@ -521,13 +616,25 @@ export default function SearchPoiOverlay({
   };
 
   const handleChoosePoi = (item) => {
+    const parentPoi = fallbackPois.find((p) => String(p.id) === String(item.id));
+    const localMeta = BRAGA_POIS.find((b) => String(b.id) === String(item.id));
+    const resolvedImages =
+      Array.isArray(item.images) && item.images.length > 0
+        ? item.images
+        : Array.isArray(parentPoi?.images) && parentPoi.images.length > 0
+        ? parentPoi.images
+        : localMeta?.images || [];
+
     Keyboard.dismiss();
     setOpenDropdown(null);
     onClose?.();
     onSelectPoi?.({
+      ...localMeta,
+      ...parentPoi,
       ...item,
+      images: resolvedImages,
       rating: item.rating ?? null,
-      distance: item.distance || '12km',
+      distance: item.distance || parentPoi?.distance || '12km',
     });
   };
 
@@ -544,7 +651,12 @@ export default function SearchPoiOverlay({
       <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
         {label}
       </Text>
-      <View style={[styles.filterChevronCircle, isActive && styles.filterChevronCircleActive]}>
+      <View
+        style={[
+          styles.filterChevronCircle,
+          isActive && styles.filterChevronCircleActive,
+        ]}
+      >
         <Ionicons
           name="chevron-down"
           size={12}
@@ -560,7 +672,7 @@ export default function SearchPoiOverlay({
       style={styles.poiCard}
       onPress={() => handleChoosePoi(item)}
     >
-      <WireframeImageBox width={82} height={82} />
+      <SearchPoiThumbnail poi={item} fallbackPois={fallbackPois} />
 
       <View style={styles.poiCardBody}>
         <View style={styles.poiTopRow}>
@@ -1126,6 +1238,12 @@ const styles = StyleSheet.create({
     borderColor: COLORS.borderSubtle,
     padding: 10,
     gap: 12,
+  },
+  poiThumbnail: {
+    width: 82,
+    height: 82,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.lavenderTint,
   },
   poiCardBody: {
     flex: 1,
